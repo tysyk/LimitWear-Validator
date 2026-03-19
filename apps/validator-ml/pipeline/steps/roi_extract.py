@@ -1,4 +1,18 @@
 def run(ctx):
-    # Поки що ROI = вся картинка.
-    # Далі: для mockup_apparel додамо print-zone/segmentation.
-    ctx.roi = {"bbox": [0, 0, ctx.width, ctx.height], "confidence": 1.0}
+    image = ctx.bgr_used if ctx.bgr_used is not None else ctx.bgr
+
+    if image is None:
+        ctx.fail("roi_extract", "No image available for ROI extraction")
+        return
+
+    h, w = image.shape[:2]
+
+    ctx.roi = {
+        "x": 0,
+        "y": 0,
+        "width": w,
+        "height": h,
+        "used_full_image": True,
+    }
+
+    ctx.bgr_used = image

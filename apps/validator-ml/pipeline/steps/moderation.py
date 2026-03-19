@@ -1,2 +1,6 @@
 def run(ctx):
-    ctx.moderation = {"verdict": "ALLOW", "labels": []}
+    ctx.moderation = {
+        "status": "safe",
+        "flags": [],
+        "score": 0.0
+    }
