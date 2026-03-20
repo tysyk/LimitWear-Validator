@@ -1,13 +1,25 @@
-from fastapi import FastAPI, UploadFile, File
-from fastapi.responses import JSONResponse
-import numpy as np
-import cv2
+from __future__ import annotations
+
+import base64
 import uuid
+
+import cv2
+import numpy as np
+from fastapi import FastAPI, HTTPException
+from pydantic import BaseModel
 
 from pipeline.context import PipelineContext
 from pipeline.runner import run_pipeline
 
-app = FastAPI(title="Limitwear Validator ML", version="2.1.0")
+
+class ValidateRequest(BaseModel):
+    imageBase64: str
+    profileId: str = "auto"
+    includeDebug: bool = False
+    includeArtifacts: bool = False
+
+
+app = FastAPI(title="Limitwear Validator API")
 
 
 @app.get("/health")
@@ -15,34 +27,38 @@ def health():
     return {"status": "ok"}
 
 
-@app.post("/analyze")
-async def analyze(image: UploadFile = File(...), profileId: str = "auto"):
-    if not image.content_type or not image.content_type.startswith("image/"):
-        return JSONResponse(
-            status_code=400,
-            content={"error": "Uploaded file must be an image"}
-        )
+def decode_base64_image(data: str):
+    try:
+        image_bytes = base64.b64decode(data)
+        np_arr = np.frombuffer(image_bytes, np.uint8)
+        img = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
+        if img is None:
+            raise ValueError("Invalid image")
+        return img
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Invalid imageBase64: {e}")
 
-    content = await image.read()
-    arr = np.frombuffer(content, np.uint8)
-    bgr = cv2.imdecode(arr, cv2.IMREAD_COLOR)
 
-    if bgr is None:
-        return JSONResponse(
-            status_code=400,
-            content={"error": "Invalid image file"}
-        )
-
+@app.post("/validate")
+def validate(req: ValidateRequest):
+    bgr = decode_base64_image(req.imageBase64)
     h, w = bgr.shape[:2]
-    image_id = str(uuid.uuid4())
 
     ctx = PipelineContext(
-        image_id=image_id,
-        profile_id=profileId,
+        image_id=str(uuid.uuid4()),
+        profile_id=req.profileId or "auto",
         bgr=bgr,
         width=w,
-        height=h
+        height=h,
     )
 
     ctx = run_pipeline(ctx)
-    return ctx.to_response()
+    response = ctx.to_response()
+
+    if not req.includeDebug:
+        response.pop("debug", None)
+
+    if not req.includeArtifacts:
+        response.pop("artifacts", None)
+
+    return response

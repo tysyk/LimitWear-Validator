@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import time
 
 from pipeline.steps.quality_gate import run as quality_gate
@@ -23,20 +25,21 @@ PIPELINE_STEPS = [
 
 
 def run_pipeline(ctx):
-    for step_name, step_func in PIPELINE_STEPS:
-        if ctx.stop_pipeline:
+    for step_name, step_fn in PIPELINE_STEPS:
+        if ctx.stop_pipeline and step_name not in {"aggregate", "explain"}:
             break
 
-        started_at = time.perf_counter()
-
+        started = time.perf_counter()
         try:
-            step_func(ctx)
-            ctx.mark_step_done(step_name)
+            step_fn(ctx)
         except Exception as exc:
-            ctx.add_error(step=step_name, message=str(exc), critical=True)
-            ctx.verdict = "ERROR"
+            ctx.fail(step_name, f"{type(exc).__name__}: {exc}", verdict="ERROR")
         finally:
-            elapsed = time.perf_counter() - started_at
-            ctx.set_timing(step_name, elapsed)
+            ctx.set_timing(step_name, time.perf_counter() - started)
+            ctx.mark_step_done(step_name)
+
+    if ctx.verdict == "UNKNOWN":
+        ctx.set_verdict("ERROR")
+        ctx.add_error("runner", "Pipeline finished without final verdict", critical=False)
 
     return ctx

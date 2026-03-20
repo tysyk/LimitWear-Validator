@@ -1,258 +1,188 @@
-import statistics
+from __future__ import annotations
+
+from typing import Any, Dict, List
 
 
-def _avg_ocr_conf(ocr):
-    if not ocr:
-        return 0.0
-    return sum(float(x.get("conf", 0.0)) for x in ocr) / len(ocr)
+SAFE_MARGIN_RATIO = 0.05
+TOO_MUCH_TEXT_WORDS = 12
+TOO_MUCH_TEXT_BLOCKS = 5
+HIGH_SKEW_DEG = 8.0
+MESSY_LINES_COUNT = 45
+LOGO_LIKE_REVIEW_COUNT = 3
 
 
-def _is_noise_text(t: str) -> bool:
-    t = (t or "").strip()
-    return len(t) <= 1
+def _get_bbox(item: Dict[str, Any]) -> List[int] | None:
+    bbox = item.get("bbox")
+    if isinstance(bbox, list) and len(bbox) == 4:
+        return bbox
+    return None
 
 
-def _severity_rank(severity: str) -> int:
-    mapping = {
-        "WARN": 1,
-        "MED": 2,
-        "HIGH": 3,
-    }
-    return mapping.get(severity, 0)
+def _estimate_words(ocr_items: List[Dict[str, Any]]) -> int:
+    total = 0
+    for item in ocr_items:
+        text = str(item.get("text") or item.get("value") or "").strip()
+        if text:
+            total += len([x for x in text.split() if x.strip()])
+    return total
+
+
+def _text_near_edge(bbox: List[int], width: int, height: int, margin_ratio: float) -> bool:
+    x1, y1, x2, y2 = bbox
+    mx = int(width * margin_ratio)
+    my = int(height * margin_ratio)
+    return x1 <= mx or y1 <= my or x2 >= (width - mx) or y2 >= (height - my)
 
 
 def run(ctx):
-    ocr = ctx.detections.get("ocr", [])
-    lines = ctx.detections.get("lines", [])
+    width = int(ctx.width)
+    height = int(ctx.height)
 
-    ctx.rule_results = []
-    ctx.violations = []
-    ctx.score = 100
+    ocr_items = ctx.detections.get("ocr") or []
+    lines = ctx.detections.get("lines") or []
+    ip = ctx.detections.get("ip") or {}
+    logo_like = ctx.detections.get("logoLikeMarks") or []
+    skew_angle = ctx.debug.get("skew_angle_deg")
 
-    w, h = ctx.width, ctx.height
+    word_count = _estimate_words(ocr_items)
+    text_blocks = len(ocr_items)
 
-    # --- RULE 1: Too much text
-    block_count = len(ocr)
-    word_count = sum(len((item.get("text") or "").split()) for item in ocr)
+    ctx.debug["rulesInput"] = {
+        "wordCount": word_count,
+        "textBlocks": text_blocks,
+        "lineCount": len(lines),
+        "skewAngleDeg": skew_angle,
+        "logoLikeCount": len(logo_like),
+        "ipExactHits": len(ip.get("exactHits", [])),
+        "ipSuspiciousHits": len(ip.get("suspiciousHits", [])),
+    }
 
-    passed = not (block_count > 8 or word_count > 35)
-    ctx.rule_results.append({
-        "ruleId": "TOO_MUCH_TEXT",
-        "passed": passed,
-        "meta": {
-            "block_count": block_count,
-            "word_count": word_count,
+    too_much_text = word_count > TOO_MUCH_TEXT_WORDS or text_blocks > TOO_MUCH_TEXT_BLOCKS
+    ctx.add_rule_result(
+        rule_id="TOO_MUCH_TEXT",
+        passed=not too_much_text,
+        severity="medium",
+        penalty=20 if too_much_text else 0,
+        title="Забагато тексту",
+        message=(
+            f"На дизайні забагато тексту: {word_count} слів, {text_blocks} текстових блоків."
+            if too_much_text
+            else "Кількість тексту в межах норми."
+        ),
+        meta={"wordCount": word_count, "textBlocks": text_blocks},
+    )
+
+    edge_violations = 0
+    for item in ocr_items:
+        bbox = _get_bbox(item)
+        if bbox and _text_near_edge(bbox, width, height, SAFE_MARGIN_RATIO):
+            edge_violations += 1
+            ctx.add_rule_result(
+                rule_id="TEXT_NEAR_EDGE",
+                passed=False,
+                severity="medium",
+                penalty=8,
+                title="Текст занадто близько до краю",
+                message="Текстовий блок заходить у небезпечну крайову зону.",
+                bbox=bbox,
+                meta={"safeMarginRatio": SAFE_MARGIN_RATIO},
+            )
+
+    if edge_violations == 0:
+        ctx.add_rule_result(
+            rule_id="TEXT_NEAR_EDGE",
+            passed=True,
+            severity="low",
+            penalty=0,
+            title="Безпечні поля",
+            message="Текст не заходить у небезпечну крайову зону.",
+            meta={"safeMarginRatio": SAFE_MARGIN_RATIO},
+        )
+
+    skew_bad = isinstance(skew_angle, (int, float)) and abs(float(skew_angle)) >= HIGH_SKEW_DEG
+    ctx.add_rule_result(
+        rule_id="HIGH_SKEW",
+        passed=not skew_bad,
+        severity="medium",
+        penalty=15 if skew_bad else 0,
+        title="Сильний перекіс",
+        message=(
+            f"Виявлено сильний перекіс: {float(skew_angle):.2f}°."
+            if skew_bad
+            else "Критичного перекосу не виявлено."
+        ),
+        meta={"skewAngleDeg": skew_angle, "threshold": HIGH_SKEW_DEG},
+    )
+
+    messy_lines = len(lines) >= MESSY_LINES_COUNT
+    ctx.add_rule_result(
+        rule_id="MESSY_LINES",
+        passed=not messy_lines,
+        severity="low",
+        penalty=10 if messy_lines else 0,
+        title="Перенавантажений ескіз",
+        message=(
+            f"Виявлено надто багато ліній: {len(lines)}."
+            if messy_lines
+            else "Кількість ліній в межах допустимого."
+        ),
+        meta={"lineCount": len(lines), "threshold": MESSY_LINES_COUNT},
+    )
+
+    for hit in ip.get("exactHits", []):
+        hit_type = hit.get("type", "ip")
+        title_map = {
+            "brand": "Виявлено бренд",
+            "character": "Виявлено персонажа",
+            "franchise": "Виявлено франшизу",
+            "slogan": "Виявлено захищений слоган",
         }
-    })
 
-    if not passed:
-        ctx.violations.append({
-            "ruleId": "TOO_MUCH_TEXT",
-            "title": "Забагато тексту",
-            "severity": "MED",
-            "message": f"Блоків: {block_count}, слів: {word_count}.",
-            "bbox": None
-        })
-        ctx.score -= 15
+        ctx.add_rule_result(
+            rule_id=f"IP_{hit_type.upper()}_EXACT",
+            passed=False,
+            severity="high",
+            penalty=50,
+            title=title_map.get(hit_type, "Виявлено захищений контент"),
+            message=f"Знайдено збіг: {hit.get('keyword')}",
+            bbox=hit.get("bbox"),
+            meta=hit,
+        )
 
-    # --- RULE 2: Text near edge
-    safe = int(min(w, h) * 0.04)
+    for hit in ip.get("suspiciousHits", []):
+        hit_type = hit.get("type", "ip")
+        ctx.add_rule_result(
+            rule_id=f"IP_{hit_type.upper()}_SUSPECT",
+            passed=False,
+            severity="medium",
+            penalty=20,
+            title="Підозра на захищений контент",
+            message=f"Підозрілий збіг: {hit.get('keyword')} (score={hit.get('score')})",
+            bbox=hit.get("bbox"),
+            meta=hit,
+        )
 
-    filtered_ocr = []
-    for item in ocr:
-        text = (item.get("text") or "").strip()
-        conf = float(item.get("conf", 0.0))
-        if conf < 0.4:
-            continue
-        if _is_noise_text(text):
-            continue
-        filtered_ocr.append(item)
+    if not ip.get("exactHits") and not ip.get("suspiciousHits"):
+        ctx.add_rule_result(
+            rule_id="IP_RISK_CLEAR",
+            passed=True,
+            severity="low",
+            penalty=0,
+            title="Ознак захищеного контенту не знайдено",
+            message="Текстових IP-збігів не виявлено.",
+        )
 
-    edge_violation = None
-    for item in filtered_ocr:
-        bbox = item.get("bbox")
-        if not bbox or len(bbox) != 4:
-            continue
-
-        x1, y1, x2, y2 = bbox
-        if x1 < safe or y1 < safe or x2 > (w - safe) or y2 > (h - safe):
-            edge_violation = {
-                "ruleId": "TEXT_NEAR_EDGE",
-                "title": "Текст біля краю",
-                "severity": "MED",
-                "message": f"Текст '{item.get('text', '')[:30]}' близько до краю (safe={safe}px).",
-                "bbox": [x1, y1, x2, y2]
-            }
-            break
-
-    ctx.rule_results.append({
-        "ruleId": "TEXT_NEAR_EDGE",
-        "passed": edge_violation is None,
-        "meta": {
-            "safe_margin_px": safe,
-            "checked_blocks": len(filtered_ocr),
-        }
-    })
-
-    if edge_violation:
-        ctx.violations.append(edge_violation)
-        ctx.score -= 10
-
-    # --- RULE 3: Sketch line straightness
-    messy_lines_violation = None
-
-    if ctx.scene.get("type") == "sketch_scan" and len(lines) >= 5:
-        angles = [l["angle"] for l in lines if l.get("length", 0) >= 60 and "angle" in l]
-
-        if len(angles) >= 5:
-            norm = []
-            for a in angles:
-                while a > 90:
-                    a -= 180
-                while a < -90:
-                    a += 180
-                norm.append(a)
-
-            spread = statistics.pstdev(norm)
-            ctx.rule_results.append({
-                "ruleId": "LINES_MESSY",
-                "passed": spread <= 20,
-                "meta": {
-                    "spread": round(spread, 2),
-                    "line_count": len(angles),
-                }
-            })
-
-            if spread > 20:
-                messy_lines_violation = {
-                    "ruleId": "LINES_MESSY",
-                    "title": "Лінії нерівні/хаотичні",
-                    "severity": "WARN",
-                    "message": f"Великий розкид кутів ліній (stdev={spread:.1f}).",
-                    "bbox": None
-                }
-
-    if messy_lines_violation:
-        ctx.violations.append(messy_lines_violation)
-        ctx.score -= 10
-
-    # --- RULE 4: Skew angle too big
-    ang = ctx.debug.get("skew_angle_deg")
-    skew_violation = None
-
-    if ctx.scene.get("type") == "sketch_scan" and ang is not None:
-        if abs(ang) >= 7:
-            skew_violation = {
-                "ruleId": "SCAN_SKEW_HIGH",
-                "title": "Сильний перекіс скану/фото",
-                "severity": "HIGH",
-                "message": f"Перекіс приблизно {ang:.1f}°. Краще пересканити/перезняти рівніше.",
-                "bbox": None
-            }
-            ctx.rule_results.append({
-                "ruleId": "SCAN_SKEW",
-                "passed": False,
-                "meta": {
-                    "skew_angle_deg": round(float(ang), 2),
-                    "level": "high",
-                }
-            })
-            ctx.score -= 20
-
-        elif abs(ang) >= 3:
-            skew_violation = {
-                "ruleId": "SCAN_SKEW",
-                "title": "Є перекіс скану/фото",
-                "severity": "WARN",
-                "message": f"Перекіс приблизно {ang:.1f}°. Ми вирівняли, але краще робити рівно.",
-                "bbox": None
-            }
-            ctx.rule_results.append({
-                "ruleId": "SCAN_SKEW",
-                "passed": False,
-                "meta": {
-                    "skew_angle_deg": round(float(ang), 2),
-                    "level": "warn",
-                }
-            })
-            ctx.score -= 5
-        else:
-            ctx.rule_results.append({
-                "ruleId": "SCAN_SKEW",
-                "passed": True,
-                "meta": {
-                    "skew_angle_deg": round(float(ang), 2),
-                    "level": "ok",
-                }
-            })
-
-    if skew_violation:
-        ctx.violations.append(skew_violation)
-
-    # --- RULE 5: Unreliable input -> NEED_REVIEW
-    qs = float(ctx.quality.get("quality_score", 1.0))
-    ocr_conf = _avg_ocr_conf(ocr)
-    ctx.debug["ocr_avg_conf"] = round(ocr_conf, 4)
-
-    need_review = qs < 0.7 and ocr_conf < 0.35
-
-    ctx.rule_results.append({
-        "ruleId": "INPUT_RELIABILITY",
-        "passed": not need_review,
-        "meta": {
-            "quality_score": round(qs, 4),
-            "ocr_avg_conf": round(ocr_conf, 4),
-        }
-    })
-
-    if need_review:
-        ctx.debug["need_review_reason"] = "low_quality_and_low_ocr_conf"
-
-    # --- normalize score
-    if ctx.score < 0:
-        ctx.score = 0
-    if ctx.score > 100:
-        ctx.score = 100
-
-    # --- final verdict
-    has_high = any(v.get("severity") == "HIGH" for v in ctx.violations)
-    max_severity = max((_severity_rank(v.get("severity", "")) for v in ctx.violations), default=0)
-
-    if need_review:
-        ctx.verdict = "NEED_REVIEW"
-    elif has_high:
-        ctx.verdict = "REJECTED"
-    elif ctx.score >= 85 and max_severity <= 1:
-        ctx.verdict = "APPROVED"
-    elif ctx.score >= 60:
-        ctx.verdict = "APPROVED_WITH_WARNINGS"
-    else:
-        ctx.verdict = "REJECTED"
-
-    # --- RULE 6: Low OCR confidence
-    if ocr_conf < 0.3 and len(ocr) > 0:
-        ctx.rule_results.append({
-            "ruleId": "LOW_OCR_CONF",
-            "passed": False,
-            "meta": {
-                "ocr_avg_conf": round(ocr_conf, 4),
-                "ocr_count": len(ocr),
-            }
-        })
-        ctx.violations.append({
-            "ruleId": "LOW_OCR_CONF",
-            "title": "Погано читається текст",
-            "severity": "WARN",
-            "message": f"Низька впевненість OCR ({ocr_conf:.2f}). Можливо текст розмитий або неякісний.",
-            "bbox": None
-        })
-        ctx.score -= 5
-    else:
-        ctx.rule_results.append({
-            "ruleId": "LOW_OCR_CONF",
-            "passed": True,
-            "meta": {
-                "ocr_avg_conf": round(ocr_conf, 4),
-                "ocr_count": len(ocr),
-            }
-        })
+    logo_like_review = len(logo_like) >= LOGO_LIKE_REVIEW_COUNT
+    ctx.add_rule_result(
+        rule_id="LOGO_LIKE_MARKS",
+        passed=not logo_like_review,
+        severity="medium",
+        penalty=18 if logo_like_review else 0,
+        title="Підозра на візуальні емблеми",
+        message=(
+            f"Виявлено багато компактних контрастних емблемоподібних форм: {len(logo_like)}."
+            if logo_like_review
+            else "Критичної кількості емблемоподібних форм не виявлено."
+        ),
+        meta={"logoLikeCount": len(logo_like), "threshold": LOGO_LIKE_REVIEW_COUNT},
+    )

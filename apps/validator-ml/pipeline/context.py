@@ -1,5 +1,10 @@
+from __future__ import annotations
+
 from dataclasses import dataclass, field
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
+
+
+ALLOWED_VERDICTS = {"UNKNOWN", "PASS", "WARN", "FAIL", "NEED_REVIEW", "ERROR"}
 
 
 @dataclass
@@ -10,26 +15,23 @@ class PipelineContext:
     width: int
     height: int
 
-    # step outputs
     quality: Dict[str, Any] = field(default_factory=dict)
     scene: Dict[str, Any] = field(default_factory=dict)
     roi: Dict[str, Any] = field(default_factory=dict)
     moderation: Dict[str, Any] = field(default_factory=dict)
     detections: Dict[str, Any] = field(default_factory=dict)
 
-    # rules / final result
     rule_results: List[Dict[str, Any]] = field(default_factory=list)
     violations: List[Dict[str, Any]] = field(default_factory=list)
+
     score: int = 100
     verdict: str = "UNKNOWN"
     explain: List[str] = field(default_factory=list)
 
-    # extra data
     artifacts: Dict[str, Any] = field(default_factory=dict)
     debug: Dict[str, Any] = field(default_factory=dict)
     bgr_used: Any = None
 
-    # runtime control
     errors: List[Dict[str, Any]] = field(default_factory=list)
     warnings: List[str] = field(default_factory=list)
     steps_completed: List[str] = field(default_factory=list)
@@ -37,11 +39,13 @@ class PipelineContext:
     stop_pipeline: bool = False
 
     def add_error(self, step: str, message: str, critical: bool = False) -> None:
-        self.errors.append({
-            "step": step,
-            "message": message,
-            "critical": critical,
-        })
+        self.errors.append(
+            {
+                "step": step,
+                "message": message,
+                "critical": critical,
+            }
+        )
         if critical:
             self.stop_pipeline = True
 
@@ -52,30 +56,56 @@ class PipelineContext:
         self.steps_completed.append(step)
 
     def set_timing(self, step: str, seconds: float) -> None:
-        self.timings[step] = round(seconds, 4)
+        self.timings[step] = round(float(seconds), 4)
 
-    def fail(self, step: str, message: str, verdict: str = "REJECTED") -> None:
-        self.add_error(step=step, message=message, critical=True)
+    def set_verdict(self, verdict: str) -> None:
+        if verdict not in ALLOWED_VERDICTS:
+            raise ValueError(f"Unsupported verdict: {verdict}")
         self.verdict = verdict
 
-    def add_violation(
+    def fail(self, step: str, message: str, verdict: str = "ERROR") -> None:
+        self.add_error(step=step, message=message, critical=True)
+        self.set_verdict(verdict)
+
+    def add_rule_result(
         self,
-        code: str,
-        message: str,
-        severity: str = "medium",
-        points: int = 0,
-        meta: Dict[str, Any] | None = None,
+        rule_id: str,
+        passed: bool,
+        severity: str = "low",
+        penalty: int = 0,
+        title: str = "",
+        message: str = "",
+        bbox: Optional[List[int]] = None,
+        meta: Optional[Dict[str, Any]] = None,
     ) -> None:
-        self.violations.append({
-            "code": code,
+        rule = {
+            "ruleId": rule_id,
+            "passed": passed,
+            "severity": severity.lower(),
+            "penalty": max(0, int(penalty)),
+            "title": title or rule_id,
             "message": message,
-            "severity": severity,
-            "points": points,
+            "bbox": bbox,
             "meta": meta or {},
-        })
+        }
+        self.rule_results.append(rule)
+
+        if not passed:
+            self.violations.append(
+                {
+                    "ruleId": rule_id,
+                    "title": rule["title"],
+                    "severity": severity.upper(),
+                    "message": message,
+                    "bbox": bbox,
+                    "penalty": rule["penalty"],
+                    "meta": rule["meta"],
+                }
+            )
 
     def add_explain(self, message: str) -> None:
-        self.explain.append(message)
+        if message:
+            self.explain.append(message)
 
     def to_response(self) -> Dict[str, Any]:
         return {
@@ -90,6 +120,7 @@ class PipelineContext:
             "roi": self.roi,
             "moderation": self.moderation,
             "detections": self.detections,
+            "ruleResults": self.rule_results,
             "score": self.score,
             "verdict": self.verdict,
             "violations": self.violations,
