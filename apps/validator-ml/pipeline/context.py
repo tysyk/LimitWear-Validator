@@ -78,14 +78,16 @@ class PipelineContext:
         bbox: Optional[List[int]] = None,
         meta: Optional[Dict[str, Any]] = None,
     ) -> None:
+        normalized_severity = severity.lower()
+
         rule = {
             "ruleId": rule_id,
             "passed": passed,
-            "severity": severity.lower(),
+            "severity": normalized_severity,
             "penalty": max(0, int(penalty)),
             "title": title or rule_id,
             "message": message,
-            "bbox": bbox,
+            "bbox": bbox,  # expected format: [x1, y1, x2, y2]
             "meta": meta or {},
         }
         self.rule_results.append(rule)
@@ -95,7 +97,7 @@ class PipelineContext:
                 {
                     "ruleId": rule_id,
                     "title": rule["title"],
-                    "severity": severity.upper(),
+                    "severity": normalized_severity,
                     "message": message,
                     "bbox": bbox,
                     "penalty": rule["penalty"],

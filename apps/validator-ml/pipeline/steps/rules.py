@@ -9,6 +9,7 @@ TOO_MUCH_TEXT_BLOCKS = 5
 HIGH_SKEW_DEG = 8.0
 MESSY_LINES_COUNT = 45
 LOGO_LIKE_REVIEW_COUNT = 3
+WATERMARK_REVIEW_COUNT = 1
 
 
 def _get_bbox(item: Dict[str, Any]) -> List[int] | None:
@@ -34,7 +35,7 @@ def _text_near_edge(bbox: List[int], width: int, height: int, margin_ratio: floa
     return x1 <= mx or y1 <= my or x2 >= (width - mx) or y2 >= (height - my)
 
 
-def run(ctx):
+def run(ctx) -> None:
     width = int(ctx.width)
     height = int(ctx.height)
 
@@ -42,6 +43,8 @@ def run(ctx):
     lines = ctx.detections.get("lines") or []
     ip = ctx.detections.get("ip") or {}
     logo_like = ctx.detections.get("logoLikeMarks") or []
+    qr_marks = ctx.detections.get("qrMarks") or []
+    watermark_marks = ctx.detections.get("watermarkMarks") or []
     skew_angle = ctx.debug.get("skew_angle_deg")
 
     word_count = _estimate_words(ocr_items)
@@ -53,6 +56,8 @@ def run(ctx):
         "lineCount": len(lines),
         "skewAngleDeg": skew_angle,
         "logoLikeCount": len(logo_like),
+        "qrCount": len(qr_marks),
+        "watermarkCount": len(watermark_marks),
         "ipExactHits": len(ip.get("exactHits", [])),
         "ipSuspiciousHits": len(ip.get("suspiciousHits", [])),
     }
@@ -108,7 +113,7 @@ def run(ctx):
         title="Сильний перекіс",
         message=(
             f"Виявлено сильний перекіс: {float(skew_angle):.2f}°."
-            if skew_bad
+            if skew_bad and skew_angle is not None
             else "Критичного перекосу не виявлено."
         ),
         meta={"skewAngleDeg": skew_angle, "threshold": HIGH_SKEW_DEG},
@@ -186,3 +191,35 @@ def run(ctx):
         ),
         meta={"logoLikeCount": len(logo_like), "threshold": LOGO_LIKE_REVIEW_COUNT},
     )
+
+    qr_detected = len(qr_marks) > 0
+    ctx.add_rule_result(
+        rule_id="QR_DETECTED",
+        passed=not qr_detected,
+        severity="medium",
+        penalty=25 if qr_detected else 0,
+        title="Виявлено QR-код",
+        message=(
+            f"На зображенні виявлено {len(qr_marks)} QR-код(ів)."
+            if qr_detected
+            else "QR-кодів не виявлено."
+        ),
+        meta={"qrCount": len(qr_marks)},
+    )
+
+    watermark_detected = len(watermark_marks) >= WATERMARK_REVIEW_COUNT
+    ctx.add_rule_result(
+        rule_id="WATERMARK_DETECTED",
+        passed=not watermark_detected,
+        severity="medium",
+        penalty=22 if watermark_detected else 0,
+        title="Підозра на водяний знак",
+        message=(
+            f"Виявлено {len(watermark_marks)} watermark-подібну область(і)."
+            if watermark_detected
+            else "Водяних знаків не виявлено."
+        ),
+        meta={"watermarkCount": len(watermark_marks)},
+    )
+
+    ctx.mark_step_done("rules")

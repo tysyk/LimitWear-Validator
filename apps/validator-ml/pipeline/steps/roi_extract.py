@@ -1,4 +1,7 @@
-def run(ctx):
+from __future__ import annotations
+
+
+def run(ctx) -> None:
     image = ctx.bgr_used if ctx.bgr_used is not None else ctx.bgr
 
     if image is None:
@@ -16,3 +19,4 @@ def run(ctx):
     }
 
     ctx.bgr_used = image
+    ctx.mark_step_done("roi_extract")

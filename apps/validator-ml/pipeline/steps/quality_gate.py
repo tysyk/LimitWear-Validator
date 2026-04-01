@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import cv2
 
 
@@ -6,7 +8,7 @@ MIN_HEIGHT = 256
 MIN_LAPLACIAN_VARIANCE = 40.0
 
 
-def run(ctx):
+def run(ctx) -> None:
     image = ctx.bgr
 
     if image is None:
@@ -41,25 +43,42 @@ def run(ctx):
     }
 
     if not passed_resolution:
-        ctx.violations.append({
-            "ruleId": "LOW_RESOLUTION",
-            "title": "Низька роздільна здатність",
-            "severity": "HIGH",
-            "message": f"Розмір зображення замалий: {w}x{h}. Мінімум {MIN_WIDTH}x{MIN_HEIGHT}.",
-            "bbox": None
-        })
+        ctx.violations.append(
+            {
+                "ruleId": "LOW_RESOLUTION",
+                "title": "Низька роздільна здатність",
+                "severity": "high",
+                "message": f"Розмір зображення замалий: {w}x{h}. Мінімум {MIN_WIDTH}x{MIN_HEIGHT}.",
+                "bbox": None,
+                "penalty": 0,
+                "meta": {
+                    "width": w,
+                    "height": h,
+                    "minWidth": MIN_WIDTH,
+                    "minHeight": MIN_HEIGHT,
+                },
+            }
+        )
         ctx.fail("quality_gate", "Image resolution is too low", verdict="NEED_REVIEW")
         return
 
     if not passed_blur:
-        ctx.violations.append({
-            "ruleId": "BLURRY_IMAGE",
-            "title": "Розмите зображення",
-            "severity": "MED",
-            "message": f"Зображення занадто розмите (blur_score={blur_score:.2f}).",
-            "bbox": None
-        })
+        ctx.violations.append(
+            {
+                "ruleId": "BLURRY_IMAGE",
+                "title": "Розмите зображення",
+                "severity": "medium",
+                "message": f"Зображення занадто розмите (blur_score={blur_score:.2f}).",
+                "bbox": None,
+                "penalty": 0,
+                "meta": {
+                    "blurScore": round(blur_score, 2),
+                    "minBlurScore": MIN_LAPLACIAN_VARIANCE,
+                },
+            }
+        )
         ctx.fail("quality_gate", "Image is too blurry", verdict="NEED_REVIEW")
         return
 
     ctx.bgr_used = image
+    ctx.mark_step_done("quality_gate")

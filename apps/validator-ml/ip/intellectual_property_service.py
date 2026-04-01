@@ -143,12 +143,14 @@ def analyze_ip_risk(
     franchise_hits = _match_keywords(texts, FRANCHISE_KEYWORDS, "franchise")
     slogan_hits = _match_keywords(texts, SLOGAN_KEYWORDS, "slogan")
 
+    all_hits = brand_hits + character_hits + franchise_hits + slogan_hits
+
     exact_hits = [
-        h for h in (brand_hits + character_hits + franchise_hits + slogan_hits)
+        h for h in all_hits
         if h["matchKind"] in {"exact_substring", "exact_fuzzy"}
     ]
     suspicious_hits = [
-        h for h in (brand_hits + character_hits + franchise_hits + slogan_hits)
+        h for h in all_hits
         if h["matchKind"] == "suspicious_fuzzy"
     ]
 

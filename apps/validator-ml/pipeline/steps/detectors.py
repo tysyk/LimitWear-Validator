@@ -10,6 +10,8 @@ try:
 except Exception:
     easyocr = None
 
+from detectors.qr.qr_detector import detect_qr_codes
+from detectors.watermarks.watermark_detector import detect_watermark_like_regions
 from ip import analyze_ip_risk
 
 
@@ -93,6 +95,7 @@ def _detect_lines(image: np.ndarray) -> List[Dict[str, Any]]:
                 "angle": round(angle, 2),
             }
         )
+
     return out
 
 
@@ -104,6 +107,7 @@ def _estimate_skew_deg(lines: List[Dict[str, Any]]) -> float | None:
     for line in lines:
         angle = float(line.get("angle", 0.0))
         normalized = angle
+
         while normalized <= -90:
             normalized += 180
         while normalized > 90:
@@ -119,11 +123,6 @@ def _estimate_skew_deg(lines: List[Dict[str, Any]]) -> float | None:
 
 
 def _detect_simple_logo_like_marks(image: np.ndarray) -> List[Dict[str, Any]]:
-    """
-    Це не справжній logo detector.
-    Це лише weak signal: великі контрастні компактні емблеми/marks.
-    Справжній visual IP block будемо добивати окремо.
-    """
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
     blur = cv2.GaussianBlur(gray, (5, 5), 0)
     _, th = cv2.threshold(blur, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
@@ -137,6 +136,7 @@ def _detect_simple_logo_like_marks(image: np.ndarray) -> List[Dict[str, Any]]:
     for cnt in contours[:400]:
         x, y, cw, ch = cv2.boundingRect(cnt)
         area = float(cw * ch)
+
         if area < area_img * 0.002:
             continue
         if area > area_img * 0.25:
@@ -158,13 +158,15 @@ def _detect_simple_logo_like_marks(image: np.ndarray) -> List[Dict[str, Any]]:
     return hits[:30]
 
 
-def run(ctx):
+def run(ctx) -> None:
     image = ctx.bgr_used if ctx.bgr_used is not None else ctx.bgr
 
     ocr_items = _run_easyocr(image)
     lines = _detect_lines(image)
     skew_angle_deg = _estimate_skew_deg(lines)
     logo_like = _detect_simple_logo_like_marks(image)
+    qr_hits = detect_qr_codes(image)
+    watermark_hits = detect_watermark_like_regions(image, ocr_items)
     ip_result = analyze_ip_risk(detections={"ocr": ocr_items})
 
     ctx.detections = {
@@ -172,6 +174,8 @@ def run(ctx):
         "ocr": ocr_items,
         "lines": lines,
         "logoLikeMarks": logo_like,
+        "qrMarks": qr_hits,
+        "watermarkMarks": watermark_hits,
         "ip": ip_result,
     }
 
@@ -179,3 +183,7 @@ def run(ctx):
     ctx.debug["lineCount"] = len(lines)
     ctx.debug["skew_angle_deg"] = skew_angle_deg
     ctx.debug["logoLikeCount"] = len(logo_like)
+    ctx.debug["qrCount"] = len(qr_hits)
+    ctx.debug["watermarkCount"] = len(watermark_hits)
+
+    ctx.mark_step_done("detectors")

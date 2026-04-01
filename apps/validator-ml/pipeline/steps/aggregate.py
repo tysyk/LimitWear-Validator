@@ -1,13 +1,15 @@
 from __future__ import annotations
 
 
-def run(ctx):
+def run(ctx) -> None:
     if ctx.verdict == "FAIL":
         ctx.score = 0
+        ctx.mark_step_done("aggregate")
         return
 
     if ctx.verdict == "ERROR":
         ctx.score = 0
+        ctx.mark_step_done("aggregate")
         return
 
     penalties = 0
@@ -33,6 +35,14 @@ def run(ctx):
     moderation = ctx.moderation or {}
     ip = ctx.detections.get("ip") or {}
 
+    scene_type = ctx.scene.get("type")
+    if scene_type in ["text_heavy_cover", "poster_like"]:
+        ctx.score = max(0, 100 - penalties)
+        ctx.set_verdict("NEED_REVIEW")
+        ctx.debug["need_review_reason"] = "Non-apparel or text-heavy input"
+        ctx.mark_step_done("aggregate")
+        return
+
     quality_score = float(ctx.quality.get("quality_score", 1.0) or 1.0)
     blur_ok = bool(ctx.quality.get("passed_blur", True))
     resolution_ok = bool(ctx.quality.get("passed_resolution", True))
@@ -57,35 +67,44 @@ def run(ctx):
         "qualityScore": quality_score,
         "ipBlocked": ip.get("blocked", False),
         "ipNeedsReview": ip.get("needsReview", False),
+        "sceneType": scene_type,
     }
 
     if moderation.get("blocked"):
         ctx.set_verdict("FAIL")
+        ctx.mark_step_done("aggregate")
         return
 
     if ip.get("blocked"):
         ctx.set_verdict("FAIL")
+        ctx.mark_step_done("aggregate")
         return
 
     if not resolution_ok or quality_score < 0.35:
         ctx.set_verdict("NEED_REVIEW")
         ctx.debug["need_review_reason"] = "Input quality is too low for reliable validation"
+        ctx.mark_step_done("aggregate")
         return
 
     if high_count >= 1 or ctx.score < 45:
         ctx.set_verdict("FAIL")
+        ctx.mark_step_done("aggregate")
         return
 
     if ip.get("needsReview"):
         ctx.set_verdict("NEED_REVIEW")
+        ctx.mark_step_done("aggregate")
         return
 
     if moderation.get("needsReview"):
         ctx.set_verdict("NEED_REVIEW")
+        ctx.mark_step_done("aggregate")
         return
 
     if med_count >= 1 or low_count >= 2 or ctx.score < 75:
         ctx.set_verdict("WARN")
+        ctx.mark_step_done("aggregate")
         return
 
     ctx.set_verdict("PASS")
+    ctx.mark_step_done("aggregate")

@@ -5,25 +5,58 @@ from typing import Any, Dict, List
 
 
 SEXUAL_TERMS = {
-    "sex", "sexy", "xxx", "porn", "onlyfans", "nude", "naked", "fetish",
-    "bdsm", "lingerie", "erotic", "18+", "nsfw",
+    "sex",
+    "sexy",
+    "xxx",
+    "porn",
+    "onlyfans",
+    "nude",
+    "naked",
+    "fetish",
+    "bdsm",
+    "lingerie",
+    "erotic",
+    "18+",
+    "nsfw",
 }
 
 HATE_TERMS = {
-    "nazi", "hitler", "white power", "kkk", "heil", "swastika",
+    "nazi",
+    "hitler",
+    "white power",
+    "kkk",
+    "heil",
+    "swastika",
 }
 
 VIOLENCE_TERMS = {
-    "kill", "murder", "rape", "shoot", "stab", "bloodbath",
+    "kill",
+    "murder",
+    "rape",
+    "shoot",
+    "stab",
+    "bloodbath",
 }
 
 SELF_HARM_TERMS = {
-    "suicide", "self harm", "cut myself", "kill myself",
+    "suicide",
+    "self harm",
+    "cut myself",
+    "kill myself",
 }
 
 BRAND_TERMS = {
-    "nike", "adidas", "puma", "gucci", "prada", "balenciaga",
-    "louis vuitton", "supreme", "chanel", "dior", "versace",
+    "nike",
+    "adidas",
+    "puma",
+    "gucci",
+    "prada",
+    "balenciaga",
+    "louis vuitton",
+    "supreme",
+    "chanel",
+    "dior",
+    "versace",
 }
 
 
@@ -35,21 +68,26 @@ def _normalize_text(text: str) -> str:
 
 def _extract_ocr_texts(ocr_items: List[Dict[str, Any]]) -> List[str]:
     texts: List[str] = []
+
     for item in ocr_items or []:
         value = item.get("text") or item.get("value") or ""
         if not isinstance(value, str):
             continue
+
         value = value.strip()
         if value:
             texts.append(value)
+
     return texts
 
 
 def _find_matches(normalized_text: str, terms: set[str]) -> List[str]:
     hits: List[str] = []
+
     for term in terms:
         if term in normalized_text:
             hits.append(term)
+
     return sorted(set(hits))
 
 
@@ -94,14 +132,19 @@ def moderate_image_and_text(
         push_label("self_harm_text", 0.99, True, self_harm_hits)
 
     if brand_hits:
-        push_label("brand_text_detected", 0.8, False, brand_hits)
+        push_label("brand_text_detected", 0.80, False, brand_hits)
 
     blur_score = float(quality.get("blur_score", 0.0) or 0.0)
     if blur_score < 20:
-        push_label("very_low_visual_reliability", 0.7, False, [f"blur_score={blur_score:.2f}"])
+        push_label(
+            "very_low_visual_reliability",
+            0.70,
+            False,
+            [f"blur_score={blur_score:.2f}"],
+        )
 
-    blocked_labels = [x["label"] for x in labels if x["blocked"]]
-    needs_review = any(x["label"] == "very_low_visual_reliability" for x in labels)
+    blocked_labels = [label["label"] for label in labels if label["blocked"]]
+    needs_review = any(label["label"] == "very_low_visual_reliability" for label in labels)
 
     return {
         "ok": len(blocked_labels) == 0,
