@@ -12,6 +12,7 @@ except Exception:
 
 from detectors.qr.qr_detector import detect_qr_codes
 from detectors.watermarks.watermark_detector import detect_watermark_like_regions
+from detectors.logos.logo_visual_detector import detect_visual_logo_marks
 from ip import analyze_ip_risk
 
 
@@ -179,11 +180,19 @@ def run(ctx) -> None:
         "ip": ip_result,
     }
 
+    scene_type = getattr(ctx, "scene", {}).get("type")
+
+    if scene_type in ["text_heavy_cover", "poster_like"]:
+        ctx.detections["visualLogoMarks"] = []
+    else:
+        ctx.detections["visualLogoMarks"] = detect_visual_logo_marks(image=image, detections=ctx.detections)
+
     ctx.debug["ocrCount"] = len(ocr_items)
     ctx.debug["lineCount"] = len(lines)
     ctx.debug["skew_angle_deg"] = skew_angle_deg
     ctx.debug["logoLikeCount"] = len(logo_like)
     ctx.debug["qrCount"] = len(qr_hits)
     ctx.debug["watermarkCount"] = len(watermark_hits)
+    ctx.debug["visualLogoCount"] = len(ctx.detections["visualLogoMarks"])
 
     ctx.mark_step_done("detectors")

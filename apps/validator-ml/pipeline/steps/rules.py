@@ -39,13 +39,15 @@ def run(ctx) -> None:
     width = int(ctx.width)
     height = int(ctx.height)
 
-    ocr_items = ctx.detections.get("ocr") or []
+    ocr_items = ctx.detections.get("ocr", []) or []
     lines = ctx.detections.get("lines") or []
     ip = ctx.detections.get("ip") or {}
     logo_like = ctx.detections.get("logoLikeMarks") or []
+    visual_logo = ctx.detections.get("visualLogoMarks") or []
     qr_marks = ctx.detections.get("qrMarks") or []
     watermark_marks = ctx.detections.get("watermarkMarks") or []
     skew_angle = ctx.debug.get("skew_angle_deg")
+    scene_type = (ctx.scene or {}).get("type")
 
     word_count = _estimate_words(ocr_items)
     text_blocks = len(ocr_items)
@@ -56,10 +58,12 @@ def run(ctx) -> None:
         "lineCount": len(lines),
         "skewAngleDeg": skew_angle,
         "logoLikeCount": len(logo_like),
+        "visualLogoCount": len(visual_logo),
         "qrCount": len(qr_marks),
         "watermarkCount": len(watermark_marks),
         "ipExactHits": len(ip.get("exactHits", [])),
         "ipSuspiciousHits": len(ip.get("suspiciousHits", [])),
+        "sceneType": scene_type,
     }
 
     too_much_text = word_count > TOO_MUCH_TEXT_WORDS or text_blocks > TOO_MUCH_TEXT_BLOCKS
@@ -177,7 +181,9 @@ def run(ctx) -> None:
             message="Текстових IP-збігів не виявлено.",
         )
 
-    logo_like_review = len(logo_like) >= LOGO_LIKE_REVIEW_COUNT
+    logo_like_allowed = scene_type not in ["text_heavy_cover", "poster_like"]
+    logo_like_review = logo_like_allowed and len(logo_like) >= LOGO_LIKE_REVIEW_COUNT
+
     ctx.add_rule_result(
         rule_id="LOGO_LIKE_MARKS",
         passed=not logo_like_review,
@@ -189,8 +195,67 @@ def run(ctx) -> None:
             if logo_like_review
             else "Критичної кількості емблемоподібних форм не виявлено."
         ),
-        meta={"logoLikeCount": len(logo_like), "threshold": LOGO_LIKE_REVIEW_COUNT},
+        meta={
+            "logoLikeCount": len(logo_like),
+            "threshold": LOGO_LIKE_REVIEW_COUNT,
+            "skippedForScene": not logo_like_allowed,
+            "sceneType": scene_type,
+        },
     )
+
+    # VISUAL LOGO RULES
+    # Для обкладинок / постерів не караємо за visual logo detections
+    if scene_type not in ["text_heavy_cover", "poster_like"]:
+        strong_centered = []
+        medium_marks = []
+
+        for mark in visual_logo:
+            score = float(mark.get("emblem_score", 0.0))
+            area_ratio = float(mark.get("area_ratio", 0.0))
+            center_dist = float(mark.get("center_dist", 1.0))
+
+            if score >= 0.62 and area_ratio >= 0.02 and center_dist <= 0.38:
+                strong_centered.append(mark)
+
+            if score >= 0.58 and area_ratio >= 0.006:
+                medium_marks.append(mark)
+
+        if strong_centered:
+            top = strong_centered[0]
+            ctx.add_rule_result(
+                rule_id="VISUAL_LOGO_CENTER",
+                passed=False,
+                severity="high",
+                penalty=40,
+                title="Великий логотип по центру",
+                message="Виявлено велику емблему або логотип у центральній зоні.",
+                bbox=top.get("bbox"),
+                meta=top,
+            )
+
+        elif len(medium_marks) >= 3:
+            ctx.add_rule_result(
+                rule_id="VISUAL_LOGO_MULTIPLE",
+                passed=False,
+                severity="medium",
+                penalty=20,
+                title="Багато емблем",
+                message=f"Виявлено багато підозрілих емблем: {len(medium_marks)}.",
+                meta={"count": len(medium_marks), "items": medium_marks[:5]},
+            )
+
+        elif len(visual_logo) > 0:
+            top = visual_logo[0]
+            ctx.add_rule_result(
+                rule_id="VISUAL_LOGO_SUSPECT",
+                passed=False,
+                severity="low",
+                penalty=10,
+                title="Підозра на логотип",
+                message="Виявлено підозрілу емблему або логотип.",
+                bbox=top.get("bbox"),
+                meta=top,
+            )
 
     qr_detected = len(qr_marks) > 0
     ctx.add_rule_result(
