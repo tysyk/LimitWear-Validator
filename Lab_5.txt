@@ -1,0 +1,2 @@
+Hello from "ЖЦПЗ" Lab_5!
+Now we need new commit, because of new text added.
