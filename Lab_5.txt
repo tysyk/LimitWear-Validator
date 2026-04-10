@@ -1,2 +1,5 @@
 Hello from "ЖЦПЗ" Lab_5!
 Now we need new commit, because of new text added.
+
+New text form Lab_6!
+Anothe text for Lab_6!!!
