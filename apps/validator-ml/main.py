@@ -9,7 +9,18 @@ from fastapi import FastAPI, File, UploadFile, Form, HTTPException
 from pipeline.context import PipelineContext
 from pipeline.runner import run_pipeline
 
+from fastapi.middleware.cors import CORSMiddleware
+
 app = FastAPI(title="LimitWear Validator")
+
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 @app.get("/health")

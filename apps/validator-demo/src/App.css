@@ -1,0 +1,108 @@
+body {
+  margin: 0;
+  font-family: Arial, sans-serif;
+  background: #f5f5f5;
+  color: #111;
+}
+
+.wrapper {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 60px 20px;
+}
+
+.title {
+  font-size: 34px;
+  font-weight: 900;
+  text-align: center;
+}
+
+.subtitle {
+  text-align: center;
+  margin-top: 10px;
+  color: #777;
+}
+
+.upload {
+  margin-top: 40px;
+  text-align: center;
+}
+
+.preview {
+  margin-top: 20px;
+  text-align: center;
+}
+
+.preview img {
+  width: 260px;
+}
+
+.button {
+  margin-top: 25px;
+  padding: 14px 32px;
+  background: #ff6ea8;
+  color: black;
+  border: none;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.button:hover {
+  opacity: 0.85;
+}
+
+.result {
+  margin-top: 50px;
+}
+
+.verdict {
+  font-size: 22px;
+  font-weight: 800;
+  text-align: center;
+}
+
+.score {
+  text-align: center;
+  margin-top: 5px;
+  color: #666;
+}
+
+.explain {
+  margin-top: 30px;
+}
+
+.explain li {
+  margin-bottom: 10px;
+}
+
+.upload-box {
+  margin-top: 40px;
+  text-align: center;
+}
+
+.upload-label input {
+  display: none;
+}
+
+.upload-label {
+  display: inline-block;
+  padding: 10px 16px;
+  background: white;
+  border: 1px solid #ddd;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.upload-label:hover {
+  background: #fafafa;
+}
+
+.upload-span {
+  font-size: 14px;
+}
+
+.file-name {
+  margin-top: 10px;
+  font-size: 14px;
+  color: #666;
+}
