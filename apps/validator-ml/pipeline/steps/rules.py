@@ -65,6 +65,8 @@ def run(ctx) -> None:
         "ipSuspiciousHits": len(ip.get("suspiciousHits", [])),
         "sceneType": scene_type,
     }
+    
+    ctx.debug["is_apparel"] = ctx.scene.get("is_apparel")
 
     too_much_text = word_count > TOO_MUCH_TEXT_WORDS or text_blocks > TOO_MUCH_TEXT_BLOCKS
     ctx.add_rule_result(
@@ -123,7 +125,9 @@ def run(ctx) -> None:
         meta={"skewAngleDeg": skew_angle, "threshold": HIGH_SKEW_DEG},
     )
 
-    messy_lines = len(lines) >= MESSY_LINES_COUNT
+    messy_lines_allowed = scene_type not in ["text_heavy_cover", "poster_like"]
+    messy_lines = messy_lines_allowed and len(lines) >= MESSY_LINES_COUNT
+
     ctx.add_rule_result(
         rule_id="MESSY_LINES",
         passed=not messy_lines,
@@ -135,7 +139,12 @@ def run(ctx) -> None:
             if messy_lines
             else "Кількість ліній в межах допустимого."
         ),
-        meta={"lineCount": len(lines), "threshold": MESSY_LINES_COUNT},
+        meta={
+            "lineCount": len(lines),
+            "threshold": MESSY_LINES_COUNT,
+            "skippedForScene": not messy_lines_allowed,
+            "sceneType": scene_type,
+        },
     )
 
     for hit in ip.get("exactHits", []):
@@ -272,7 +281,9 @@ def run(ctx) -> None:
         meta={"qrCount": len(qr_marks)},
     )
 
-    watermark_detected = len(watermark_marks) >= WATERMARK_REVIEW_COUNT
+    watermark_allowed = scene_type != "text_heavy_cover"
+    watermark_detected = watermark_allowed and len(watermark_marks) >= WATERMARK_REVIEW_COUNT
+
     ctx.add_rule_result(
         rule_id="WATERMARK_DETECTED",
         passed=not watermark_detected,
@@ -284,7 +295,27 @@ def run(ctx) -> None:
             if watermark_detected
             else "Водяних знаків не виявлено."
         ),
-        meta={"watermarkCount": len(watermark_marks)},
+        meta={
+            "watermarkCount": len(watermark_marks),
+            "skippedForScene": not watermark_allowed,
+            "sceneType": scene_type,
+        },
+    )
+    
+    is_apparel = (ctx.scene or {}).get("is_apparel", True)
+
+    ctx.add_rule_result(
+        rule_id="NON_APPAREL",
+        passed=is_apparel,
+        severity="medium",
+        penalty=25 if not is_apparel else 0,
+        title="Не схоже на дизайн одягу",
+        message=(
+            "Зображення більше схоже на постер або обкладинку."
+            if not is_apparel
+            else "Зображення виглядає як дизайн одягу."
+        ),
+        meta={"is_apparel": is_apparel}
     )
 
     ctx.mark_step_done("rules")

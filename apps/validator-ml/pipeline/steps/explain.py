@@ -35,5 +35,10 @@ def run(ctx) -> None:
         ctx.add_explain(
             "Рекомендується перевірити текст, IP-ризики, розміщення елементів і чистоту композиції."
         )
+        
+    if not ctx.scene.get("is_apparel", True):
+        ctx.explain.append(
+            "Зображення не виглядає як дизайн одягу і потребує ручної перевірки."
+        )
 
     ctx.mark_step_done("explain")

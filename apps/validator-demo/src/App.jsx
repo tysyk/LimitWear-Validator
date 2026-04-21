@@ -31,24 +31,24 @@ function App() {
     }
   };
 
-  const verdictClass =
-    result?.verdict === "PASS"
-      ? "pass"
-      : result?.verdict === "WARN"
-        ? "warn"
-        : "fail";
+  const copyJson = async () => {
+    if (!result) return;
+    await navigator.clipboard.writeText(JSON.stringify(result, null, 2));
+  };
+
+  const verdictClass = result?.verdict
+    ? `verdict-${result.verdict.toLowerCase()}`
+    : "";
 
   return (
     <div className="wrapper">
       <div className="container">
         <div className="title">VALIDATOR</div>
-        <div className="subtitle">
-          Check your design before drop
-        </div>
+        <div className="subtitle">Check your design before drop</div>
 
         <div className="upload-box">
           <label className="upload-label">
-            <input type="file" onChange={handleFile} />
+            <input type="file" accept="image/*" onChange={handleFile} />
             <span className="upload-span">CHOOSE FILE</span>
           </label>
 
@@ -57,27 +57,22 @@ function App() {
 
         {preview && (
           <div className="preview">
-            <img src={preview} />
+            <img src={preview} alt="Preview" />
           </div>
         )}
 
-        <button className="button" onClick={handleAnalyze}>
+        <button className="button" onClick={handleAnalyze} disabled={!file || loading}>
           {loading ? "Analyzing..." : "ANALYZE"}
         </button>
 
         {result && (
           <div className="result">
             <div className={`verdict ${verdictClass}`}>
-              Verdict: {result.verdict}
+              {result.verdict}
             </div>
 
-            <div className="score">
-              Score: {result.score} / 100
-            </div>
-
-            <div className="score">
-              Scene: {result.scene?.type}
-            </div>
+            <div className="score">Score: {result.score} / 100</div>
+            <div className="score">Scene: {result.scene?.type || "unknown"}</div>
 
             <ul className="explain">
               {result.explain?.map((e, i) => (
@@ -85,10 +80,18 @@ function App() {
               ))}
             </ul>
 
-            <details className="details">
-              <summary>Show details</summary>
-              <pre>{JSON.stringify(result, null, 2)}</pre>
-            </details>
+            <div className="json-block">
+              <div className="json-header">
+                <span>RAW JSON</span>
+                <button onClick={copyJson} className="copy-btn">
+                  COPY
+                </button>
+              </div>
+
+              <pre className="json-content">
+                {JSON.stringify(result, null, 2)}
+              </pre>
+            </div>
           </div>
         )}
       </div>

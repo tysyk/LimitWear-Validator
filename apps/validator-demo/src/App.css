@@ -106,3 +106,57 @@ body {
   font-size: 14px;
   color: #666;
 }
+
+.json-block {
+  margin-top: 30px;
+  background: #fafafa;
+  padding: 16px;
+}
+
+.json-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+  font-weight: 700;
+}
+
+.copy-btn {
+  padding: 6px 12px;
+  background: #ff6ea8;
+  border: none;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.copy-btn:hover {
+  opacity: 0.85;
+}
+
+.json-content {
+  font-size: 12px;
+  overflow-x: auto;
+}
+
+.verdict {
+  display: inline-block;
+  padding: 10px 18px;
+  font-weight: 800;
+  margin-bottom: 20px;
+}
+
+.verdict-pass {
+  background: #dff5e3;
+}
+
+.verdict-warn {
+  background: #ffe7b8;
+}
+
+.verdict-need_review {
+  background: #ffd6e7;
+}
+
+.verdict-fail {
+  background: #ffd4d4;
+}

@@ -63,9 +63,15 @@ def run(ctx) -> None:
             scene_type = "unknown"
             confidence = 0.3
 
+        is_apparel = True
+
+        if scene_type in ["text_heavy_cover", "poster_like"]:
+            is_apparel = False
+
         ctx.scene = {
             "type": scene_type,
             "confidence": confidence,
+            "is_apparel": is_apparel,
             "signals": {
                 "edge_ratio": round(edge_ratio, 4),
                 "colorfulness": round(colorfulness, 2),

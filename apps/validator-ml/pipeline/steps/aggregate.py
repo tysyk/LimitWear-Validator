@@ -34,14 +34,10 @@ def run(ctx) -> None:
 
     moderation = ctx.moderation or {}
     ip = ctx.detections.get("ip") or {}
+    scene = ctx.scene or {}
 
-    scene_type = ctx.scene.get("type")
-    if scene_type in ["text_heavy_cover", "poster_like"]:
-        ctx.score = max(0, 100 - penalties)
-        ctx.set_verdict("NEED_REVIEW")
-        ctx.debug["need_review_reason"] = "Non-apparel or text-heavy input"
-        ctx.mark_step_done("aggregate")
-        return
+    scene_type = scene.get("type")
+    is_apparel = scene.get("is_apparel", True)
 
     quality_score = float(ctx.quality.get("quality_score", 1.0) or 1.0)
     blur_ok = bool(ctx.quality.get("passed_blur", True))
@@ -68,29 +64,38 @@ def run(ctx) -> None:
         "ipBlocked": ip.get("blocked", False),
         "ipNeedsReview": ip.get("needsReview", False),
         "sceneType": scene_type,
+        "isApparel": is_apparel,
     }
 
+    # hard fail conditions
     if moderation.get("blocked"):
+        ctx.score = 0
         ctx.set_verdict("FAIL")
         ctx.mark_step_done("aggregate")
         return
 
     if ip.get("blocked"):
+        ctx.score = 0
         ctx.set_verdict("FAIL")
         ctx.mark_step_done("aggregate")
         return
 
+    # unreliable input quality
     if not resolution_ok or quality_score < 0.35:
         ctx.set_verdict("NEED_REVIEW")
         ctx.debug["need_review_reason"] = "Input quality is too low for reliable validation"
         ctx.mark_step_done("aggregate")
         return
 
-    if high_count >= 1 or ctx.score < 45:
-        ctx.set_verdict("FAIL")
+    # non-apparel / text-heavy / poster-like content
+    if not is_apparel or scene_type in ["text_heavy_cover", "poster_like"]:
+        ctx.score = max(ctx.score, 60)
+        ctx.set_verdict("NEED_REVIEW")
+        ctx.debug["need_review_reason"] = "Non-apparel or text-heavy input"
         ctx.mark_step_done("aggregate")
         return
 
+    # review-required signals
     if ip.get("needsReview"):
         ctx.set_verdict("NEED_REVIEW")
         ctx.mark_step_done("aggregate")
@@ -101,6 +106,13 @@ def run(ctx) -> None:
         ctx.mark_step_done("aggregate")
         return
 
+    # fail conditions for apparel-like inputs
+    if high_count >= 1 or ctx.score < 45:
+        ctx.set_verdict("FAIL")
+        ctx.mark_step_done("aggregate")
+        return
+
+    # warn conditions
     if med_count >= 1 or low_count >= 2 or ctx.score < 75:
         ctx.set_verdict("WARN")
         ctx.mark_step_done("aggregate")
