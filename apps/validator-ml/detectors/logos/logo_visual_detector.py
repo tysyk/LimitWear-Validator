@@ -120,6 +120,108 @@ def _deduplicate_marks(marks: List[Dict[str, Any]], iou_threshold: float = 0.45)
     return kept
 
 
+def _detect_contrast_emblem_marks(
+    gray: np.ndarray,
+    *,
+    image_area: float,
+    w: int,
+    h: int,
+    text_boxes: List[BBox],
+    qr_boxes: List[BBox],
+    watermark_boxes: List[BBox],
+) -> List[Dict[str, Any]]:
+    candidates: List[Dict[str, Any]] = []
+
+    _, garment_binary = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
+    garment_contours, _ = cv2.findContours(garment_binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+    garment_mask = np.zeros_like(gray)
+    if garment_contours:
+        garment_cnt = max(garment_contours, key=cv2.contourArea)
+        garment_area = float(cv2.contourArea(garment_cnt))
+        if 0.12 <= garment_area / image_area <= 0.90:
+            cv2.drawContours(garment_mask, [garment_cnt], -1, 255, thickness=cv2.FILLED)
+        else:
+            garment_mask[:, :] = 255
+    else:
+        garment_mask[:, :] = 255
+
+    _, bright_mask = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+    bright_mask = cv2.bitwise_and(bright_mask, garment_mask)
+    bright_mask = cv2.morphologyEx(
+        bright_mask,
+        cv2.MORPH_OPEN,
+        cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3)),
+        iterations=1,
+    )
+    contours, _ = cv2.findContours(bright_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+    for cnt in contours:
+        area = float(cv2.contourArea(cnt))
+        if area < 500:
+            continue
+
+        x, y, bw, bh = cv2.boundingRect(cnt)
+        bbox = (x, y, x + bw, y + bh)
+        bbox_area = float(max(1, bw * bh))
+        area_ratio = bbox_area / image_area
+
+        if area_ratio < 0.004 or area_ratio > 0.14:
+            continue
+
+        aspect_ratio = float(bw) / max(float(bh), 1.0)
+        if aspect_ratio < 0.35 or aspect_ratio > 8.5:
+            continue
+
+        fill_ratio = area / bbox_area
+        if fill_ratio < 0.08 or fill_ratio > 0.85:
+            continue
+
+        cx = x + bw / 2.0
+        cy = y + bh / 2.0
+        center_dist = _normalize_center_distance(cx, cy, w, h)
+        if center_dist > 0.62:
+            continue
+
+        text_overlap = max((_bbox_overlap_ratio(bbox, tb) for tb in text_boxes), default=0.0)
+        if text_overlap > 0.35:
+            continue
+
+        qr_overlap = max((_bbox_overlap_ratio(bbox, qb) for qb in qr_boxes), default=0.0)
+        if qr_overlap > 0.25:
+            continue
+
+        wm_overlap = max((_bbox_overlap_ratio(bbox, wb) for wb in watermark_boxes), default=0.0)
+        if wm_overlap > 0.25:
+            continue
+
+        emblem_score = 0.45
+        if 0.008 <= area_ratio <= 0.08:
+            emblem_score += 0.12
+        if 0.12 <= fill_ratio <= 0.70:
+            emblem_score += 0.10
+        if 0.45 <= aspect_ratio <= 6.0:
+            emblem_score += 0.08
+        if center_dist <= 0.45:
+            emblem_score += 0.10
+
+        candidates.append(
+            {
+                "bbox": [x, y, x + bw, y + bh],
+                "area_ratio": round(area_ratio, 6),
+                "center_dist": round(center_dist, 4),
+                "emblem_score": round(float(min(emblem_score, 0.95)), 4),
+                "solidity": None,
+                "extent": round(float(fill_ratio), 4),
+                "aspect_ratio": round(float(aspect_ratio), 4),
+                "vertices": None,
+                "type": "contrast_emblem_like",
+            }
+        )
+
+    return candidates
+
+
 def detect_visual_logo_marks(
     image: np.ndarray,
     detections: Dict[str, Any] | None = None,
@@ -254,6 +356,18 @@ def detect_visual_logo_marks(
             }
         )
 
+    marks = _deduplicate_marks(marks, iou_threshold=0.45)
+    marks.extend(
+        _detect_contrast_emblem_marks(
+            gray,
+            image_area=image_area,
+            w=w,
+            h=h,
+            text_boxes=text_boxes,
+            qr_boxes=qr_boxes,
+            watermark_boxes=watermark_boxes,
+        )
+    )
     marks = _deduplicate_marks(marks, iou_threshold=0.45)
 
     filtered: List[Dict[str, Any]] = []

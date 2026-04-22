@@ -25,7 +25,7 @@ def _bbox_overlap(b1: list[int], b2: list[int]) -> float:
     return inter / max(area1, 1)
 
 
-def detect_watermark_like_regions(image, ocr_items) -> List[Dict[str, Any]]:
+def detect_watermark_like_regions(image, ocr_items, is_apparel: bool = False) -> List[Dict[str, Any]]:
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
     h, w = gray.shape[:2]
     image_area = float(w * h)
@@ -58,13 +58,13 @@ def detect_watermark_like_regions(image, ocr_items) -> List[Dict[str, Any]]:
         area = float(cw * ch)
         area_ratio = area / max(image_area, 1.0)
 
-        if area_ratio < 0.002:
+        if area_ratio < 0.003:
             continue
-        if area_ratio > 0.20:
+        if area_ratio > 0.12:
             continue
 
         aspect = cw / max(ch, 1)
-        if aspect < 1.8:
+        if aspect < 2.8:
             continue
 
         roi = gray[y:y + ch, x:x + cw]
@@ -74,19 +74,43 @@ def detect_watermark_like_regions(image, ocr_items) -> List[Dict[str, Any]]:
         std_val = float(np.std(roi))
         mean_val = float(np.mean(roi))
 
-        if std_val < 12:
+        if std_val < 18:
             continue
 
-        score = 0.45
+        # близькість до краю
+        center_x = x + cw / 2
+        center_y = y + ch / 2
+        dist_x = abs(center_x - w / 2) / max(w / 2, 1)
+        dist_y = abs(center_y - h / 2) / max(h / 2, 1)
+        centeredness = 1.0 - (dist_x + dist_y) / 2.0
 
-        if aspect >= 3.0:
+        score = 0.0
+
+        if aspect >= 3.5:
+            score += 0.20
+        if area_ratio >= 0.008:
             score += 0.15
-        if area_ratio >= 0.01:
+        if mean_val > 140:
+            score += 0.15
+        if std_val >= 24:
             score += 0.10
-        if mean_val > 120:
+        if centeredness > 0.45:
             score += 0.10
 
-        score = min(score, 0.92)
+        # apparel-safe режим: на одязі значно жорсткіше
+        if is_apparel:
+            if area_ratio < 0.006:
+                continue
+            if aspect < 3.5:
+                continue
+            score -= 0.15
+
+        score = max(0.0, min(score, 0.95))
+
+        # відсікаємо слабкі хіти
+        min_score = 0.65 if not is_apparel else 0.78
+        if score < min_score:
+            continue
 
         hits.append(
             {
@@ -98,9 +122,11 @@ def detect_watermark_like_regions(image, ocr_items) -> List[Dict[str, Any]]:
                     "areaRatio": round(float(area_ratio), 5),
                     "std": round(std_val, 2),
                     "mean": round(mean_val, 2),
+                    "centeredness": round(float(centeredness), 3),
+                    "isApparelMode": bool(is_apparel),
                 },
             }
         )
 
     hits = sorted(hits, key=lambda x: x.get("score", 0), reverse=True)
-    return hits[:15]
+    return hits[:10]

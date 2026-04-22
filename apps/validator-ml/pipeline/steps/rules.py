@@ -7,9 +7,11 @@ SAFE_MARGIN_RATIO = 0.05
 TOO_MUCH_TEXT_WORDS = 12
 TOO_MUCH_TEXT_BLOCKS = 5
 HIGH_SKEW_DEG = 8.0
+APPAREL_SKEW_DEG = 12.0
 MESSY_LINES_COUNT = 45
+APPAREL_MESSY_LINES_COUNT = 65
 LOGO_LIKE_REVIEW_COUNT = 3
-WATERMARK_REVIEW_COUNT = 1
+APPAREL_LOGO_LIKE_REVIEW_COUNT = 5
 
 
 def _get_bbox(item: Dict[str, Any]) -> List[int] | None:
@@ -24,7 +26,7 @@ def _estimate_words(ocr_items: List[Dict[str, Any]]) -> int:
     for item in ocr_items:
         text = str(item.get("text") or item.get("value") or "").strip()
         if text:
-            total += len([x for x in text.split() if x.strip()])
+            total += len([word for word in text.split() if word.strip()])
     return total
 
 
@@ -35,28 +37,58 @@ def _text_near_edge(bbox: List[int], width: int, height: int, margin_ratio: floa
     return x1 <= mx or y1 <= my or x2 >= (width - mx) or y2 >= (height - my)
 
 
+def _watermark_metrics(mark: Dict[str, Any]) -> tuple[float, float, float]:
+    meta = mark.get("meta", {}) or {}
+    return (
+        float(mark.get("score", 0.0) or 0.0),
+        float(meta.get("areaRatio", 0.0) or 0.0),
+        float(meta.get("centeredness", 0.0) or 0.0),
+    )
+
+
 def run(ctx) -> None:
     width = int(ctx.width)
     height = int(ctx.height)
 
-    ocr_items = ctx.detections.get("ocr", []) or []
-    lines = ctx.detections.get("lines") or []
-    ip = ctx.detections.get("ip") or {}
-    logo_like = ctx.detections.get("logoLikeMarks") or []
-    visual_logo = ctx.detections.get("visualLogoMarks") or []
-    qr_marks = ctx.detections.get("qrMarks") or []
-    watermark_marks = ctx.detections.get("watermarkMarks") or []
-    skew_angle = ctx.debug.get("skew_angle_deg")
-    scene_type = (ctx.scene or {}).get("type")
+    detections = ctx.detections or {}
+    scene = ctx.scene or {}
+    apparel_ml = (ctx.ml or {}).get("apparel", {})
+    detectors_debug = (ctx.debug or {}).get("detectors", {}) or {}
+    skew_meta = detectors_debug.get("skew", {}) or {}
+
+    ocr_items = detections.get("ocr", []) or []
+    lines = detections.get("lines") or []
+    ip = detections.get("ip") or {}
+    logo_like = detections.get("logoLikeMarks") or []
+    visual_logo = detections.get("visualLogoMarks") or []
+    qr_marks = detections.get("qrMarks") or []
+    watermark_marks = detections.get("watermarkMarks") or []
+
+    scene_type = scene.get("type")
+    is_apparel = bool(scene.get("is_apparel", True))
+    apparel_confidence = float(scene.get("apparel_confidence", apparel_ml.get("confidence", 0.0)) or 0.0)
+    apparel_source = scene.get("apparel_source", "unknown")
+
+    skew_angle = skew_meta.get("angleDeg", ctx.debug.get("skew_angle_deg"))
+    skew_support = int(skew_meta.get("supportLines", 0) or 0)
+    skew_confidence = float(skew_meta.get("confidence", 0.0) or 0.0)
 
     word_count = _estimate_words(ocr_items)
     text_blocks = len(ocr_items)
 
-    ctx.debug["rulesInput"] = {
+    skew_threshold = APPAREL_SKEW_DEG if is_apparel else HIGH_SKEW_DEG
+    skew_min_support = 8 if is_apparel else 5
+    skew_min_confidence = 0.60 if is_apparel else 0.45
+    messy_lines_threshold = APPAREL_MESSY_LINES_COUNT if is_apparel else MESSY_LINES_COUNT
+    logo_like_threshold = APPAREL_LOGO_LIKE_REVIEW_COUNT if is_apparel else LOGO_LIKE_REVIEW_COUNT
+
+    rules_input = {
         "wordCount": word_count,
         "textBlocks": text_blocks,
         "lineCount": len(lines),
         "skewAngleDeg": skew_angle,
+        "skewSupportLines": skew_support,
+        "skewConfidence": skew_confidence,
         "logoLikeCount": len(logo_like),
         "visualLogoCount": len(visual_logo),
         "qrCount": len(qr_marks),
@@ -64,9 +96,27 @@ def run(ctx) -> None:
         "ipExactHits": len(ip.get("exactHits", [])),
         "ipSuspiciousHits": len(ip.get("suspiciousHits", [])),
         "sceneType": scene_type,
+        "isApparel": is_apparel,
+        "apparelConfidence": round(apparel_confidence, 4),
+        "apparelSource": apparel_source,
     }
-    
-    ctx.debug["is_apparel"] = ctx.scene.get("is_apparel")
+
+    ctx.debug["rulesInput"] = rules_input
+    ctx.debug["is_apparel"] = is_apparel
+    ctx.set_debug_section(
+        "rules",
+        {
+            "inputs": rules_input,
+            "thresholds": {
+                "safeMarginRatio": SAFE_MARGIN_RATIO,
+                "skewDegrees": skew_threshold,
+                "skewSupportLines": skew_min_support,
+                "skewConfidence": skew_min_confidence,
+                "messyLines": messy_lines_threshold,
+                "logoLikeMarks": logo_like_threshold,
+            },
+        },
+    )
 
     too_much_text = word_count > TOO_MUCH_TEXT_WORDS or text_blocks > TOO_MUCH_TEXT_BLOCKS
     ctx.add_rule_result(
@@ -110,38 +160,47 @@ def run(ctx) -> None:
             meta={"safeMarginRatio": SAFE_MARGIN_RATIO},
         )
 
-    skew_bad = isinstance(skew_angle, (int, float)) and abs(float(skew_angle)) >= HIGH_SKEW_DEG
+    skew_bad = (
+        isinstance(skew_angle, (int, float))
+        and abs(float(skew_angle)) >= skew_threshold
+        and skew_support >= skew_min_support
+        and skew_confidence >= skew_min_confidence
+    )
     ctx.add_rule_result(
         rule_id="HIGH_SKEW",
         passed=not skew_bad,
-        severity="medium",
-        penalty=15 if skew_bad else 0,
+        severity="low" if is_apparel else "medium",
+        penalty=(8 if is_apparel else 15) if skew_bad else 0,
         title="Сильний перекіс",
         message=(
             f"Виявлено сильний перекіс: {float(skew_angle):.2f}°."
             if skew_bad and skew_angle is not None
             else "Критичного перекосу не виявлено."
         ),
-        meta={"skewAngleDeg": skew_angle, "threshold": HIGH_SKEW_DEG},
+        meta={
+            "skewAngleDeg": skew_angle,
+            "threshold": skew_threshold,
+            "supportLines": skew_support,
+            "confidence": skew_confidence,
+        },
     )
 
-    messy_lines_allowed = scene_type not in ["text_heavy_cover", "poster_like"]
-    messy_lines = messy_lines_allowed and len(lines) >= MESSY_LINES_COUNT
-
+    messy_lines_allowed = scene_type not in ["text_heavy_cover", "poster_like"] or is_apparel
+    messy_lines = messy_lines_allowed and len(lines) >= messy_lines_threshold
     ctx.add_rule_result(
         rule_id="MESSY_LINES",
         passed=not messy_lines,
         severity="low",
-        penalty=10 if messy_lines else 0,
+        penalty=(6 if is_apparel else 10) if messy_lines else 0,
         title="Перенавантажений ескіз",
         message=(
             f"Виявлено надто багато ліній: {len(lines)}."
             if messy_lines
-            else "Кількість ліній в межах допустимого."
+            else "Кількість ліній у межах допустимого."
         ),
         meta={
             "lineCount": len(lines),
-            "threshold": MESSY_LINES_COUNT,
+            "threshold": messy_lines_threshold,
             "skippedForScene": not messy_lines_allowed,
             "sceneType": scene_type,
         },
@@ -190,14 +249,13 @@ def run(ctx) -> None:
             message="Текстових IP-збігів не виявлено.",
         )
 
-    logo_like_allowed = scene_type not in ["text_heavy_cover", "poster_like"]
-    logo_like_review = logo_like_allowed and len(logo_like) >= LOGO_LIKE_REVIEW_COUNT
-
+    logo_like_allowed = scene_type not in ["text_heavy_cover", "poster_like"] or is_apparel
+    logo_like_review = logo_like_allowed and len(logo_like) >= logo_like_threshold
     ctx.add_rule_result(
         rule_id="LOGO_LIKE_MARKS",
         passed=not logo_like_review,
-        severity="medium",
-        penalty=18 if logo_like_review else 0,
+        severity="low" if is_apparel else "medium",
+        penalty=(8 if is_apparel else 18) if logo_like_review else 0,
         title="Підозра на візуальні емблеми",
         message=(
             f"Виявлено багато компактних контрастних емблемоподібних форм: {len(logo_like)}."
@@ -206,15 +264,13 @@ def run(ctx) -> None:
         ),
         meta={
             "logoLikeCount": len(logo_like),
-            "threshold": LOGO_LIKE_REVIEW_COUNT,
+            "threshold": logo_like_threshold,
             "skippedForScene": not logo_like_allowed,
             "sceneType": scene_type,
         },
     )
 
-    # VISUAL LOGO RULES
-    # Для обкладинок / постерів не караємо за visual logo detections
-    if scene_type not in ["text_heavy_cover", "poster_like"]:
+    if scene_type not in ["text_heavy_cover", "poster_like"] or is_apparel:
         strong_centered = []
         medium_marks = []
 
@@ -223,10 +279,10 @@ def run(ctx) -> None:
             area_ratio = float(mark.get("area_ratio", 0.0))
             center_dist = float(mark.get("center_dist", 1.0))
 
-            if score >= 0.62 and area_ratio >= 0.02 and center_dist <= 0.38:
+            if score >= 0.68 and area_ratio >= 0.02 and center_dist <= 0.38:
                 strong_centered.append(mark)
 
-            if score >= 0.58 and area_ratio >= 0.006:
+            if score >= 0.62 and area_ratio >= 0.008:
                 medium_marks.append(mark)
 
         if strong_centered:
@@ -241,7 +297,6 @@ def run(ctx) -> None:
                 bbox=top.get("bbox"),
                 meta=top,
             )
-
         elif len(medium_marks) >= 3:
             ctx.add_rule_result(
                 rule_id="VISUAL_LOGO_MULTIPLE",
@@ -252,8 +307,7 @@ def run(ctx) -> None:
                 message=f"Виявлено багато підозрілих емблем: {len(medium_marks)}.",
                 meta={"count": len(medium_marks), "items": medium_marks[:5]},
             )
-
-        elif len(visual_logo) > 0:
+        elif visual_logo and not (is_apparel and apparel_confidence >= 0.75):
             top = visual_logo[0]
             ctx.add_rule_result(
                 rule_id="VISUAL_LOGO_SUSPECT",
@@ -281,14 +335,31 @@ def run(ctx) -> None:
         meta={"qrCount": len(qr_marks)},
     )
 
-    watermark_allowed = scene_type != "text_heavy_cover"
-    watermark_detected = watermark_allowed and len(watermark_marks) >= WATERMARK_REVIEW_COUNT
+    watermark_allowed = scene_type != "text_heavy_cover" or is_apparel
+    strong_watermark_hits = []
+    apparel_strong_hits = []
+    for mark in watermark_marks:
+        score, area_ratio, centeredness = _watermark_metrics(mark)
+        if score >= 0.82 and area_ratio >= 0.008:
+            strong_watermark_hits.append(mark)
+        if score >= 0.88 and area_ratio >= 0.01 and centeredness >= 0.45:
+            apparel_strong_hits.append(mark)
+
+    watermark_detected = watermark_allowed and len(strong_watermark_hits) >= 1
+    if is_apparel:
+        watermark_detected = watermark_allowed and (
+            len(apparel_strong_hits) >= 2
+            or any(
+                _watermark_metrics(mark)[0] >= 0.92 and _watermark_metrics(mark)[1] >= 0.012
+                for mark in watermark_marks
+            )
+        )
 
     ctx.add_rule_result(
         rule_id="WATERMARK_DETECTED",
         passed=not watermark_detected,
-        severity="medium",
-        penalty=22 if watermark_detected else 0,
+        severity="low" if is_apparel else "medium",
+        penalty=(10 if is_apparel else 22) if watermark_detected else 0,
         title="Підозра на водяний знак",
         message=(
             f"Виявлено {len(watermark_marks)} watermark-подібну область(і)."
@@ -297,25 +368,31 @@ def run(ctx) -> None:
         ),
         meta={
             "watermarkCount": len(watermark_marks),
+            "strongWatermarkCount": len(strong_watermark_hits),
+            "apparelStrongCount": len(apparel_strong_hits),
             "skippedForScene": not watermark_allowed,
             "sceneType": scene_type,
+            "apparelMode": is_apparel,
         },
     )
-    
-    is_apparel = (ctx.scene or {}).get("is_apparel", True)
 
+    non_apparel_penalty = 25 if apparel_source == "ml" and apparel_confidence >= 0.70 else 12
     ctx.add_rule_result(
         rule_id="NON_APPAREL",
         passed=is_apparel,
-        severity="medium",
-        penalty=25 if not is_apparel else 0,
+        severity="medium" if apparel_source == "ml" else "low",
+        penalty=non_apparel_penalty if not is_apparel else 0,
         title="Не схоже на дизайн одягу",
         message=(
             "Зображення більше схоже на постер або обкладинку."
             if not is_apparel
             else "Зображення виглядає як дизайн одягу."
         ),
-        meta={"is_apparel": is_apparel}
+        meta={
+            "is_apparel": is_apparel,
+            "source": apparel_source,
+            "confidence": round(apparel_confidence, 4),
+        },
     )
 
     ctx.mark_step_done("rules")

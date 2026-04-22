@@ -42,43 +42,57 @@ def run(ctx) -> None:
         "min_blur_score": MIN_LAPLACIAN_VARIANCE,
     }
 
+    ctx.set_debug_section(
+        "quality_gate",
+        {
+            "resolutionOk": passed_resolution,
+            "blurOk": passed_blur,
+            "qualityScore": round(quality_score, 4),
+            "blurScore": round(blur_score, 2),
+        },
+    )
+
+    ctx.add_rule_result(
+        rule_id="LOW_RESOLUTION",
+        passed=passed_resolution,
+        severity="high",
+        penalty=0 if passed_resolution else 25,
+        title="Низька роздільна здатність",
+        message=(
+            "Роздільна здатність відповідає мінімальним вимогам."
+            if passed_resolution
+            else f"Розмір зображення замалий: {w}x{h}. Мінімум {MIN_WIDTH}x{MIN_HEIGHT}."
+        ),
+        meta={
+            "width": w,
+            "height": h,
+            "minWidth": MIN_WIDTH,
+            "minHeight": MIN_HEIGHT,
+        },
+    )
+
+    ctx.add_rule_result(
+        rule_id="BLURRY_IMAGE",
+        passed=passed_blur,
+        severity="medium",
+        penalty=0 if passed_blur else 12,
+        title="Розмите зображення",
+        message=(
+            "Різкість зображення достатня для автоматичної перевірки."
+            if passed_blur
+            else f"Зображення занадто розмите (blur_score={blur_score:.2f})."
+        ),
+        meta={
+            "blurScore": round(blur_score, 2),
+            "minBlurScore": MIN_LAPLACIAN_VARIANCE,
+        },
+    )
+
     if not passed_resolution:
-        ctx.violations.append(
-            {
-                "ruleId": "LOW_RESOLUTION",
-                "title": "Низька роздільна здатність",
-                "severity": "high",
-                "message": f"Розмір зображення замалий: {w}x{h}. Мінімум {MIN_WIDTH}x{MIN_HEIGHT}.",
-                "bbox": None,
-                "penalty": 0,
-                "meta": {
-                    "width": w,
-                    "height": h,
-                    "minWidth": MIN_WIDTH,
-                    "minHeight": MIN_HEIGHT,
-                },
-            }
-        )
-        ctx.fail("quality_gate", "Image resolution is too low", verdict="NEED_REVIEW")
-        return
+        ctx.add_warning("Image resolution is below the recommended minimum.")
 
     if not passed_blur:
-        ctx.violations.append(
-            {
-                "ruleId": "BLURRY_IMAGE",
-                "title": "Розмите зображення",
-                "severity": "medium",
-                "message": f"Зображення занадто розмите (blur_score={blur_score:.2f}).",
-                "bbox": None,
-                "penalty": 0,
-                "meta": {
-                    "blurScore": round(blur_score, 2),
-                    "minBlurScore": MIN_LAPLACIAN_VARIANCE,
-                },
-            }
-        )
-        ctx.fail("quality_gate", "Image is too blurry", verdict="NEED_REVIEW")
-        return
+        ctx.add_warning("Image sharpness is low, so some detections may be less reliable.")
 
     ctx.bgr_used = image
     ctx.mark_step_done("quality_gate")
