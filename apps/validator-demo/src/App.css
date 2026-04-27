@@ -341,7 +341,9 @@ body {
   display: flex;
   flex-direction: column;
   justify-content: center;
+  align-items: flex-start;
   height: 44px;
+  text-align: left;
 }
 
 .metricText strong {
@@ -653,32 +655,49 @@ body {
 
 @media (max-width: 760px) {
   .app {
-    width: min(430px, calc(100% - 24px));
-    margin: 16px auto;
-    border-radius: 18px;
+    width: 100%;
+    margin: 0;
+    border-radius: 0;
   }
 
   .header {
     height: 68px;
-    padding: 0 22px;
+    padding: 0 18px;
   }
 
   .brand {
     font-size: 20px;
   }
 
-  .nav,
-  .uploadBtn {
+  .nav {
     display: none;
   }
 
+  .uploadBtn {
+    display: inline-flex;
+    min-height: 28px;
+    padding: 0 8px;
+    font-size: 0;
+    border-radius: 6px;
+  }
+
+  .uploadBtn::before {
+    content: "upload design";
+    font-size: 10px;
+    line-height: 1;
+  }
+
+  .menuBtn {
+    font-size: 24px;
+    color: black;
+  }
+
   .page {
-    padding: 28px 22px 34px;
+    padding: 24px 16px 32px;
   }
 
   .hero {
-    max-width: none;
-    padding-bottom: 26px;
+    padding-bottom: 24px;
     margin-bottom: 22px;
   }
 
@@ -689,11 +708,13 @@ body {
 
   .hero h1 {
     font-size: 26px;
+    line-height: 1.12;
     letter-spacing: -0.8px;
   }
 
   .hero p {
     font-size: 14px;
+    line-height: 1.5;
   }
 
   .analysisGrid {
@@ -707,17 +728,59 @@ body {
   }
 
   .imageCard img {
-    height: 250px;
+    height: 230px;
+  }
+
+  .viewBtn {
+    height: 42px;
+    font-size: 13px;
+    font-weight: 950;
+    text-transform: uppercase;
+    cursor: pointer;
   }
 
   .scoreCard {
-    min-width: 680px;
+    width: 100%;
+    min-width: 0;
+    padding: 18px;
   }
 
   .scoreTop {
+    display: grid;
     grid-template-columns: 1fr 1fr;
-    gap: 18px;
-    padding-bottom: 20px;
+    gap: 22px;
+    padding-bottom: 22px;
+    align-items: start;
+  }
+
+  .verdictBox {
+    text-align: left;
+  }
+
+  .verdictValue {
+    font-size: 24px;
+    line-height: 1;
+    white-space: normal;
+  }
+
+  .verdictBox p {
+    font-size: 12px;
+    line-height: 1.35;
+    margin-top: 10px;
+  }
+
+  .scoreTop > div:first-child,
+  .verdictBox {
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-start;
+  }
+
+  .scoreLabel {
+    height: 20px;
+    margin-bottom: 12px;
+    display: flex;
+    align-items: flex-start;
   }
 
   .divider {
@@ -725,7 +788,9 @@ body {
   }
 
   .scoreLabel {
-    height: 22px;
+    font-size: 12px;
+    height: auto;
+    margin-bottom: 8px;
   }
 
   .scoreValue {
@@ -736,35 +801,120 @@ body {
     font-size: 18px;
   }
 
+  .progress {
+    height: 8px;
+    margin-top: 12px;
+  }
+
   .verdictValue {
-    font-size: 24px;
+    font-size: 22px;
+    line-height: 1.1;
     white-space: normal;
+  }
+
+  .verdictBox {
+    padding-top: 0;
   }
 
   .verdictBox p {
     font-size: 12px;
+    margin-top: px;
   }
 
   .fileMetrics {
     display: none;
   }
 
+  .metricRow {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 14px;
+    padding-top: 20px;
+  }
+
+  .metricItem {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .metricIcon {
+    width: 38px;
+    height: 38px;
+    border-radius: 10px;
+    font-size: 15px;
+  }
+
+  .metricText {
+    height: 38px;
+  }
+
+  .metricText strong {
+    font-size: 12px;
+  }
+
+  .metricText span {
+    font-size: 11px;
+  }
+
   .issuesCard {
-    padding: 18px;
+    padding: 22px;
   }
 
   .issuesTitle {
     font-size: 18px;
+    margin-bottom: 16px;
   }
 
   .issueItem {
-    grid-template-columns: 34px 1fr auto;
+    text-align: left;
+  }
+
+  .issueItem strong {
+    text-align: left;
+    line-height: 1.25;
+  }
+
+  .issueItem p {
+    text-align: left;
+    line-height: 1.45;
+  }
+
+  .countBubble {
+    width: 26px;
+    height: 26px;
+    font-size: 12px;
+  }
+
+  .issueItem {
+    grid-template-columns: 34px 1fr;
     gap: 10px;
+    padding: 16px 0;
+  }
+
+  .issueIcon {
+    width: 34px;
+    height: 34px;
+  }
+
+  .issueItem strong {
+    font-size: 14px;
+  }
+
+  .issueItem p {
+    font-size: 12px;
   }
 
   .badge {
+    grid-column: 2;
+    width: fit-content;
+    margin-top: 4px;
     font-size: 9px;
     padding: 6px 8px;
+  }
+
+  .viewIssues {
+    height: 44px;
+    font-size: 12px;
   }
 
   .improve {
@@ -789,10 +939,16 @@ body {
 
   .improve button {
     width: 100%;
+    height: 48px;
     margin-top: 18px;
   }
 
   .footer {
     display: none;
+  }
+
+  .modal img {
+    max-width: 94%;
+    max-height: 80%;
   }
 }
