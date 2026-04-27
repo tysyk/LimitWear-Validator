@@ -1,100 +1,66 @@
-import { useState } from "react";
-import { analyzeImage } from "./services/validatorApi";
 import "./App.css";
+import { useState } from "react";
+import { Header } from "./components/layout/Header";
+import { Footer } from "./components/layout/Footer";
+import { AnalysisHero } from "./components/analysis/AnalysisHero";
+import { AnalysisResult } from "./components/analysis/AnalysisResult";
+import { ImproveBanner } from "./components/analysis/ImproveBanner";
+import { analyzeImage } from "./services/validatorApi";
 
 function App() {
-  const [file, setFile] = useState(null);
-  const [preview, setPreview] = useState(null);
   const [result, setResult] = useState(null);
+  const [imageUrl, setImageUrl] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
 
-  const handleFile = (e) => {
-    const f = e.target.files[0];
-    if (!f) return;
-
-    setFile(f);
-    setPreview(URL.createObjectURL(f));
-    setResult(null);
-  };
-
-  const handleAnalyze = async () => {
-    if (!file) return;
-
+  const handleUpload = async (file) => {
+  try {
     setLoading(true);
-    try {
-      const data = await analyzeImage(file);
-      setResult(data);
-    } catch (e) {
-      alert("Error");
-    } finally {
-      setLoading(false);
-    }
-  };
+    setError(null);
 
-  const copyJson = async () => {
-    if (!result) return;
-    await navigator.clipboard.writeText(JSON.stringify(result, null, 2));
-  };
+    setImageUrl(URL.createObjectURL(file));
 
-  const verdictClass = result?.verdict
-    ? `verdict-${result.verdict.toLowerCase()}`
-    : "";
+    const res = await analyzeImage(file);
+    const fileSizeMb = `${(file.size / 1024 / 1024).toFixed(2)} MB`;
+    const format = file.name.split(".").pop().toUpperCase();
+
+    setResult({
+      ...res,
+      input: {
+        ...res.input,
+        fileSize: fileSizeMb,
+        format,
+      },
+    });
+  } catch (e) {
+    setError("Failed to analyze image");
+    console.error(e);
+  } finally {
+    setLoading(false);
+  }
+};
 
   return (
-    <div className="wrapper">
-      <div className="container">
-        <div className="title">VALIDATOR</div>
-        <div className="subtitle">Check your design before drop</div>
+    <div className="app">
+      <Header onUpload={handleUpload} />
 
-        <div className="upload-box">
-          <label className="upload-label">
-            <input type="file" accept="image/*" onChange={handleFile} />
-            <span className="upload-span">CHOOSE FILE</span>
-          </label>
+      <main className="page">
+        {!result && !loading && <AnalysisHero placeholder />}
 
-          {file && <div className="file-name">{file.name}</div>}
-        </div>
+        {loading && <div className="loading">Analyzing...</div>}
 
-        {preview && (
-          <div className="preview">
-            <img src={preview} alt="Preview" />
-          </div>
-        )}
-
-        <button className="button" onClick={handleAnalyze} disabled={!file || loading}>
-          {loading ? "Analyzing..." : "ANALYZE"}
-        </button>
+        {error && <div className="error">{error}</div>}
 
         {result && (
-          <div className="result">
-            <div className={`verdict ${verdictClass}`}>
-              {result.verdict}
-            </div>
-
-            <div className="score">Score: {result.score} / 100</div>
-            <div className="score">Scene: {result.scene?.type || "unknown"}</div>
-
-            <ul className="explain">
-              {result.explain?.map((e, i) => (
-                <li key={i}>{e}</li>
-              ))}
-            </ul>
-
-            <div className="json-block">
-              <div className="json-header">
-                <span>RAW JSON</span>
-                <button onClick={copyJson} className="copy-btn">
-                  COPY
-                </button>
-              </div>
-
-              <pre className="json-content">
-                {JSON.stringify(result, null, 2)}
-              </pre>
-            </div>
-          </div>
+          <>
+            <AnalysisHero result={result} />
+            <AnalysisResult result={result} imageUrl={imageUrl} />
+            <ImproveBanner />
+          </>
         )}
-      </div>
+      </main>
+
+      <Footer />
     </div>
   );
 }
