@@ -28,5 +28,5 @@ class AggregateStepTests(unittest.TestCase):
 
         aggregate_run(ctx)
 
-        self.assertEqual(ctx.verdict, "NEED_REVIEW")
-        self.assertIn("non-apparel", ctx.debug.get("need_review_reason", ""))
+        self.assertEqual(ctx.verdict, "FAIL")
+        self.assertIn("non-apparel", ctx.debug.get("fail_reason", ""))

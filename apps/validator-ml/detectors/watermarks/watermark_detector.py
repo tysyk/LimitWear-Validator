@@ -5,6 +5,8 @@ from typing import Any, Dict, List
 import cv2
 import numpy as np
 
+from core.config import WATERMARK_WEAK_SCORE
+
 
 def _bbox_from_rect(x: int, y: int, w: int, h: int) -> list[int]:
     return [int(x), int(y), int(x + w), int(y + h)]
@@ -108,7 +110,7 @@ def detect_watermark_like_regions(image, ocr_items, is_apparel: bool = False) ->
         score = max(0.0, min(score, 0.95))
 
         # відсікаємо слабкі хіти
-        min_score = 0.65 if not is_apparel else 0.78
+        min_score = 0.65 if not is_apparel else WATERMARK_WEAK_SCORE
         if score < min_score:
             continue
 

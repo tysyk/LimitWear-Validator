@@ -13,6 +13,7 @@ except Exception:  # pragma: no cover - depends on local OCR runtime
 from detectors.logos.logo_visual_detector import detect_visual_logo_marks
 from detectors.qr.qr_detector import detect_qr_codes
 from detectors.watermarks.watermark_detector import detect_watermark_like_regions
+from core.config import VISUAL_LOGO_CENTER_SCORE, VISUAL_LOGO_MEDIUM_AREA_RATIO, VISUAL_LOGO_MEDIUM_SCORE
 from ip import analyze_ip_risk
 
 
@@ -265,9 +266,9 @@ def _filter_visual_logo_marks(
         area_ratio = float(mark.get("area_ratio", 0.0))
         center_dist = float(mark.get("center_dist", 1.0))
 
-        keep = score >= 0.68
+        keep = score >= VISUAL_LOGO_CENTER_SCORE
         if not keep and apparel_confidence < 0.75:
-            keep = score >= 0.62 and area_ratio >= 0.01 and center_dist <= 0.45
+            keep = score >= VISUAL_LOGO_MEDIUM_SCORE and area_ratio >= VISUAL_LOGO_MEDIUM_AREA_RATIO and center_dist <= 0.45
 
         if keep:
             filtered.append(mark)

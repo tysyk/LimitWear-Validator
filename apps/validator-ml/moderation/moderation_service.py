@@ -4,20 +4,23 @@ import re
 from typing import Any, Dict, List
 
 
-SEXUAL_TERMS = {
-    "sex",
-    "sexy",
+SEXUAL_BLOCK_TERMS = {
     "xxx",
     "porn",
     "onlyfans",
     "nude",
     "naked",
+    "18+",
+    "nsfw",
+}
+
+SEXUAL_REVIEW_TERMS = {
+    "sex",
+    "sexy",
     "fetish",
     "bdsm",
     "lingerie",
     "erotic",
-    "18+",
-    "nsfw",
 }
 
 HATE_TERMS = {
@@ -29,12 +32,15 @@ HATE_TERMS = {
     "swastika",
 }
 
-VIOLENCE_TERMS = {
-    "kill",
+VIOLENCE_BLOCK_TERMS = {
     "murder",
     "rape",
     "shoot",
     "stab",
+}
+
+VIOLENCE_REVIEW_TERMS = {
+    "kill",
     "bloodbath",
 }
 
@@ -101,32 +107,41 @@ def moderate_image_and_text(
     texts = _extract_ocr_texts(ocr_items)
     merged_text = _normalize_text(" ".join(texts))
 
-    sexual_hits = _find_matches(merged_text, SEXUAL_TERMS)
+    sexual_block_hits = _find_matches(merged_text, SEXUAL_BLOCK_TERMS)
+    sexual_review_hits = _find_matches(merged_text, SEXUAL_REVIEW_TERMS)
     hate_hits = _find_matches(merged_text, HATE_TERMS)
-    violence_hits = _find_matches(merged_text, VIOLENCE_TERMS)
+    violence_block_hits = _find_matches(merged_text, VIOLENCE_BLOCK_TERMS)
+    violence_review_hits = _find_matches(merged_text, VIOLENCE_REVIEW_TERMS)
     self_harm_hits = _find_matches(merged_text, SELF_HARM_TERMS)
     brand_hits = _find_matches(merged_text, BRAND_TERMS)
 
     labels: List[Dict[str, Any]] = []
 
-    def push_label(name: str, score: float, blocked: bool, evidence: List[str]) -> None:
+    def push_label(name: str, score: float, blocked: bool, evidence: List[str], needs_review: bool = False) -> None:
         labels.append(
             {
                 "label": name,
                 "score": round(float(score), 4),
                 "blocked": blocked,
+                "needsReview": needs_review,
                 "evidence": evidence,
             }
         )
 
-    if sexual_hits:
-        push_label("sexual_text", 0.98, True, sexual_hits)
+    if sexual_block_hits:
+        push_label("sexual_text", 0.98, True, sexual_block_hits)
+
+    if sexual_review_hits:
+        push_label("sexual_text_review", 0.72, False, sexual_review_hits, needs_review=True)
 
     if hate_hits:
         push_label("hate_symbol_or_text", 0.99, True, hate_hits)
 
-    if violence_hits:
-        push_label("graphic_or_violent_text", 0.95, True, violence_hits)
+    if violence_block_hits:
+        push_label("graphic_or_violent_text", 0.95, True, violence_block_hits)
+
+    if violence_review_hits:
+        push_label("violent_text_review", 0.70, False, violence_review_hits, needs_review=True)
 
     if self_harm_hits:
         push_label("self_harm_text", 0.99, True, self_harm_hits)
@@ -144,7 +159,8 @@ def moderate_image_and_text(
         )
 
     blocked_labels = [label["label"] for label in labels if label["blocked"]]
-    needs_review = any(label["label"] == "very_low_visual_reliability" for label in labels)
+    needs_review = any(label.get("needsReview") for label in labels)
+    needs_review = needs_review or any(label["label"] == "very_low_visual_reliability" for label in labels)
 
     return {
         "ok": len(blocked_labels) == 0,
@@ -153,9 +169,11 @@ def moderate_image_and_text(
         "labels": labels,
         "blockedReasons": blocked_labels,
         "textSignals": {
-            "sexualHits": sexual_hits,
+            "sexualHits": sexual_block_hits,
+            "sexualReviewHits": sexual_review_hits,
             "hateHits": hate_hits,
-            "violenceHits": violence_hits,
+            "violenceHits": violence_block_hits,
+            "violenceReviewHits": violence_review_hits,
             "selfHarmHits": self_harm_hits,
             "brandHits": brand_hits,
         },

@@ -2,16 +2,31 @@ from __future__ import annotations
 
 from typing import Any, Dict, List
 
-
-SAFE_MARGIN_RATIO = 0.05
-TOO_MUCH_TEXT_WORDS = 12
-TOO_MUCH_TEXT_BLOCKS = 5
-HIGH_SKEW_DEG = 8.0
-APPAREL_SKEW_DEG = 12.0
-MESSY_LINES_COUNT = 45
-APPAREL_MESSY_LINES_COUNT = 65
-LOGO_LIKE_REVIEW_COUNT = 3
-APPAREL_LOGO_LIKE_REVIEW_COUNT = 5
+from core.config import (
+    APPAREL_LOGO_LIKE_REVIEW_COUNT,
+    APPAREL_MESSY_LINES_COUNT,
+    LOGO_LIKE_REVIEW_COUNT,
+    MESSY_LINES_COUNT,
+    NON_APPAREL_BLOCK_CONFIDENCE,
+    SAFE_MARGIN_RATIO,
+    SKEW_APPAREL_ANGLE_DEG,
+    SKEW_APPAREL_CONFIDENCE,
+    SKEW_APPAREL_SUPPORT_LINES,
+    SKEW_DOCUMENT_ANGLE_DEG,
+    SKEW_DOCUMENT_CONFIDENCE,
+    SKEW_DOCUMENT_SUPPORT_LINES,
+    TOO_MUCH_TEXT_BLOCKS,
+    TOO_MUCH_TEXT_WORDS,
+    VISUAL_LOGO_CENTER_AREA_RATIO,
+    VISUAL_LOGO_CENTER_DISTANCE,
+    VISUAL_LOGO_CENTER_SCORE,
+    VISUAL_LOGO_MEDIUM_AREA_RATIO,
+    VISUAL_LOGO_MEDIUM_SCORE,
+    WATERMARK_BLOCK_SCORE,
+    WATERMARK_CENTEREDNESS,
+    WATERMARK_STRONG_AREA_RATIO,
+    WATERMARK_STRONG_SCORE,
+)
 
 
 def _get_bbox(item: Dict[str, Any]) -> List[int] | None:
@@ -46,6 +61,29 @@ def _watermark_metrics(mark: Dict[str, Any]) -> tuple[float, float, float]:
     )
 
 
+def _confirmed_ip(ip: Dict[str, Any]) -> bool:
+    return bool(ip.get("blocked") or ip.get("exactHits"))
+
+
+def _strong_suspicious_ip(ip: Dict[str, Any]) -> bool:
+    for hit in ip.get("suspiciousHits", []) or []:
+        try:
+            if float(hit.get("score", 0.0) or 0.0) >= 0.92:
+                return True
+        except (TypeError, ValueError):
+            continue
+    return False
+
+
+def _has_watermark_text_evidence(ocr_items: List[Dict[str, Any]]) -> bool:
+    terms = ("watermark", "stock", "preview", "sample")
+    for item in ocr_items:
+        text = str(item.get("text") or item.get("value") or "").lower()
+        if any(term in text for term in terms):
+            return True
+    return False
+
+
 def run(ctx) -> None:
     width = int(ctx.width)
     height = int(ctx.height)
@@ -76,9 +114,9 @@ def run(ctx) -> None:
     word_count = _estimate_words(ocr_items)
     text_blocks = len(ocr_items)
 
-    skew_threshold = APPAREL_SKEW_DEG if is_apparel else HIGH_SKEW_DEG
-    skew_min_support = 8 if is_apparel else 5
-    skew_min_confidence = 0.60 if is_apparel else 0.45
+    skew_threshold = SKEW_APPAREL_ANGLE_DEG if is_apparel else SKEW_DOCUMENT_ANGLE_DEG
+    skew_min_support = SKEW_APPAREL_SUPPORT_LINES if is_apparel else SKEW_DOCUMENT_SUPPORT_LINES
+    skew_min_confidence = SKEW_APPAREL_CONFIDENCE if is_apparel else SKEW_DOCUMENT_CONFIDENCE
     messy_lines_threshold = APPAREL_MESSY_LINES_COUNT if is_apparel else MESSY_LINES_COUNT
     logo_like_threshold = APPAREL_LOGO_LIKE_REVIEW_COUNT if is_apparel else LOGO_LIKE_REVIEW_COUNT
 
@@ -123,14 +161,14 @@ def run(ctx) -> None:
         rule_id="TOO_MUCH_TEXT",
         passed=not too_much_text,
         severity="medium",
-        penalty=20 if too_much_text else 0,
+        penalty=12 if too_much_text else 0,
         title="Забагато тексту",
         message=(
             f"На дизайні забагато тексту: {word_count} слів, {text_blocks} текстових блоків."
             if too_much_text
             else "Кількість тексту в межах норми."
         ),
-        meta={"wordCount": word_count, "textBlocks": text_blocks},
+        meta={"wordCount": word_count, "textBlocks": text_blocks, "blocking": False},
     )
 
     edge_violations = 0
@@ -142,11 +180,11 @@ def run(ctx) -> None:
                 rule_id="TEXT_NEAR_EDGE",
                 passed=False,
                 severity="medium",
-                penalty=8,
+                penalty=6,
                 title="Текст занадто близько до краю",
                 message="Текстовий блок заходить у небезпечну крайову зону.",
                 bbox=bbox,
-                meta={"safeMarginRatio": SAFE_MARGIN_RATIO},
+                meta={"safeMarginRatio": SAFE_MARGIN_RATIO, "blocking": False},
             )
 
     if edge_violations == 0:
@@ -170,18 +208,19 @@ def run(ctx) -> None:
         rule_id="HIGH_SKEW",
         passed=not skew_bad,
         severity="low" if is_apparel else "medium",
-        penalty=(8 if is_apparel else 15) if skew_bad else 0,
+        penalty=(4 if is_apparel else 10) if skew_bad else 0,
         title="Сильний перекіс",
         message=(
-            f"Виявлено сильний перекіс: {float(skew_angle):.2f}°."
+            f"Виявлено помітний перекіс: {float(skew_angle):.2f}°."
             if skew_bad and skew_angle is not None
-            else "Критичного перекосу не виявлено."
+            else "Достатньо підтвердженого перекосу не виявлено."
         ),
         meta={
             "skewAngleDeg": skew_angle,
             "threshold": skew_threshold,
             "supportLines": skew_support,
             "confidence": skew_confidence,
+            "blocking": False,
         },
     )
 
@@ -191,7 +230,7 @@ def run(ctx) -> None:
         rule_id="MESSY_LINES",
         passed=not messy_lines,
         severity="low",
-        penalty=(6 if is_apparel else 10) if messy_lines else 0,
+        penalty=(4 if is_apparel else 8) if messy_lines else 0,
         title="Перенавантажений ескіз",
         message=(
             f"Виявлено надто багато ліній: {len(lines)}."
@@ -203,6 +242,7 @@ def run(ctx) -> None:
             "threshold": messy_lines_threshold,
             "skippedForScene": not messy_lines_allowed,
             "sceneType": scene_type,
+            "blocking": False,
         },
     )
 
@@ -221,9 +261,9 @@ def run(ctx) -> None:
             severity="high",
             penalty=50,
             title=title_map.get(hit_type, "Виявлено захищений контент"),
-            message=f"Знайдено збіг: {hit.get('keyword')}",
+            message=f"Знайдено підтверджений збіг: {hit.get('keyword')}",
             bbox=hit.get("bbox"),
-            meta=hit,
+            meta={**hit, "blocking": True, "riskType": "confirmed_ip"},
         )
 
     for hit in ip.get("suspiciousHits", []):
@@ -232,11 +272,11 @@ def run(ctx) -> None:
             rule_id=f"IP_{hit_type.upper()}_SUSPECT",
             passed=False,
             severity="medium",
-            penalty=20,
+            penalty=16,
             title="Підозра на захищений контент",
             message=f"Підозрілий збіг: {hit.get('keyword')} (score={hit.get('score')})",
             bbox=hit.get("bbox"),
-            meta=hit,
+            meta={**hit, "blocking": False, "needsReview": True, "riskType": "suspected_ip"},
         )
 
     if not ip.get("exactHits") and not ip.get("suspiciousHits"):
@@ -255,10 +295,10 @@ def run(ctx) -> None:
         rule_id="LOGO_LIKE_MARKS",
         passed=not logo_like_review,
         severity="low" if is_apparel else "medium",
-        penalty=(8 if is_apparel else 18) if logo_like_review else 0,
-        title="Підозра на візуальні емблеми",
+        penalty=(4 if is_apparel else 10) if logo_like_review else 0,
+        title="Емблемоподібні форми",
         message=(
-            f"Виявлено багато компактних контрастних емблемоподібних форм: {len(logo_like)}."
+            f"Виявлено кілька компактних емблемоподібних форм: {len(logo_like)}. Рекомендована перевірка."
             if logo_like_review
             else "Критичної кількості емблемоподібних форм не виявлено."
         ),
@@ -267,6 +307,7 @@ def run(ctx) -> None:
             "threshold": logo_like_threshold,
             "skippedForScene": not logo_like_allowed,
             "sceneType": scene_type,
+            "blocking": False,
         },
     )
 
@@ -279,33 +320,58 @@ def run(ctx) -> None:
             area_ratio = float(mark.get("area_ratio", 0.0))
             center_dist = float(mark.get("center_dist", 1.0))
 
-            if score >= 0.68 and area_ratio >= 0.02 and center_dist <= 0.38:
+            if (
+                score >= VISUAL_LOGO_CENTER_SCORE
+                and area_ratio >= VISUAL_LOGO_CENTER_AREA_RATIO
+                and center_dist <= VISUAL_LOGO_CENTER_DISTANCE
+            ):
                 strong_centered.append(mark)
 
-            if score >= 0.62 and area_ratio >= 0.008:
+            if score >= VISUAL_LOGO_MEDIUM_SCORE and area_ratio >= VISUAL_LOGO_MEDIUM_AREA_RATIO:
                 medium_marks.append(mark)
+
+        confirmed_ip = _confirmed_ip(ip)
+        strong_suspicious_ip = _strong_suspicious_ip(ip)
 
         if strong_centered:
             top = strong_centered[0]
+            blocking = confirmed_ip or strong_suspicious_ip
             ctx.add_rule_result(
                 rule_id="VISUAL_LOGO_CENTER",
                 passed=False,
-                severity="high",
-                penalty=40,
-                title="Великий логотип по центру",
-                message="Виявлено велику емблему або логотип у центральній зоні.",
+                severity="high" if blocking else "medium",
+                penalty=40 if blocking else 14,
+                title="Емблемоподібний елемент у центрі",
+                message=(
+                    "Виявлено емблемоподібний елемент разом із підтвердженим IP/brand ризиком."
+                    if blocking
+                    else "Виявлено емблемоподібний елемент, рекомендована перевірка."
+                ),
                 bbox=top.get("bbox"),
-                meta=top,
+                meta={
+                    **top,
+                    "blocking": blocking,
+                    "hasConfirmedIp": confirmed_ip,
+                    "hasStrongSuspiciousIp": strong_suspicious_ip,
+                    "needsReview": not blocking,
+                    "riskType": "visual_logo_shape",
+                },
             )
         elif len(medium_marks) >= 3:
             ctx.add_rule_result(
                 rule_id="VISUAL_LOGO_MULTIPLE",
                 passed=False,
                 severity="medium",
-                penalty=20,
-                title="Багато емблем",
-                message=f"Виявлено багато підозрілих емблем: {len(medium_marks)}.",
-                meta={"count": len(medium_marks), "items": medium_marks[:5]},
+                penalty=12,
+                title="Кілька емблемоподібних елементів",
+                message="Виявлено кілька емблемоподібних елементів, рекомендована перевірка.",
+                meta={
+                    "count": len(medium_marks),
+                    "items": medium_marks[:5],
+                    "blocking": False,
+                    "needsReview": True,
+                    "riskType": "visual_logo_shape",
+                },
             )
         elif visual_logo and not (is_apparel and apparel_confidence >= 0.75):
             top = visual_logo[0]
@@ -313,11 +379,11 @@ def run(ctx) -> None:
                 rule_id="VISUAL_LOGO_SUSPECT",
                 passed=False,
                 severity="low",
-                penalty=10,
-                title="Підозра на логотип",
-                message="Виявлено підозрілу емблему або логотип.",
+                penalty=6,
+                title="Емблемоподібний елемент",
+                message="Виявлено емблемоподібний елемент, рекомендована перевірка.",
                 bbox=top.get("bbox"),
-                meta=top,
+                meta={**top, "blocking": False, "needsReview": True, "riskType": "visual_logo_shape"},
             )
 
     qr_detected = len(qr_marks) > 0
@@ -325,73 +391,94 @@ def run(ctx) -> None:
         rule_id="QR_DETECTED",
         passed=not qr_detected,
         severity="medium",
-        penalty=25 if qr_detected else 0,
+        penalty=18 if qr_detected else 0,
         title="Виявлено QR-код",
         message=(
-            f"На зображенні виявлено {len(qr_marks)} QR-код(ів)."
+            f"На зображенні виявлено {len(qr_marks)} QR-код(ів). Рекомендована перевірка."
             if qr_detected
             else "QR-кодів не виявлено."
         ),
-        meta={"qrCount": len(qr_marks)},
+        meta={"qrCount": len(qr_marks), "blocking": False, "needsReview": qr_detected},
     )
 
-    watermark_allowed = scene_type != "text_heavy_cover" or is_apparel
+    watermark_text_evidence = _has_watermark_text_evidence(ocr_items)
     strong_watermark_hits = []
-    apparel_strong_hits = []
+    blocking_watermark_hits = []
     for mark in watermark_marks:
         score, area_ratio, centeredness = _watermark_metrics(mark)
-        if score >= 0.82 and area_ratio >= 0.008:
+        if score >= WATERMARK_STRONG_SCORE and area_ratio >= WATERMARK_STRONG_AREA_RATIO:
             strong_watermark_hits.append(mark)
-        if score >= 0.88 and area_ratio >= 0.01 and centeredness >= 0.45:
-            apparel_strong_hits.append(mark)
+        if (
+            score >= WATERMARK_BLOCK_SCORE
+            and area_ratio >= WATERMARK_STRONG_AREA_RATIO
+            and centeredness >= WATERMARK_CENTEREDNESS
+            and watermark_text_evidence
+        ):
+            blocking_watermark_hits.append(mark)
 
-    watermark_detected = watermark_allowed and len(strong_watermark_hits) >= 1
-    if is_apparel:
-        watermark_detected = watermark_allowed and (
-            len(apparel_strong_hits) >= 2
-            or any(
-                _watermark_metrics(mark)[0] >= 0.92 and _watermark_metrics(mark)[1] >= 0.012
-                for mark in watermark_marks
-            )
-        )
+    watermark_detected = len(strong_watermark_hits) > 0
+    weak_apparel_suspicion = bool(is_apparel and watermark_marks and not strong_watermark_hits)
+    watermark_blocking = bool(blocking_watermark_hits)
 
     ctx.add_rule_result(
         rule_id="WATERMARK_DETECTED",
-        passed=not watermark_detected,
-        severity="low" if is_apparel else "medium",
-        penalty=(10 if is_apparel else 22) if watermark_detected else 0,
+        passed=not watermark_detected and not weak_apparel_suspicion,
+        severity="high" if watermark_blocking else ("medium" if watermark_detected else "low"),
+        penalty=30 if watermark_blocking else (8 if watermark_detected else (2 if weak_apparel_suspicion else 0)),
         title="Підозра на водяний знак",
         message=(
-            f"Виявлено {len(watermark_marks)} watermark-подібну область(і)."
-            if watermark_detected
-            else "Водяних знаків не виявлено."
+            "Виявлено сильні ознаки водяного знака з текстовим підтвердженням."
+            if watermark_blocking
+            else (
+                "Виявлено watermark-подібну область, рекомендована перевірка."
+                if watermark_detected
+                else (
+                    "Є слабка watermark-подібна ознака на apparel, але її недостатньо для блокування."
+                    if weak_apparel_suspicion
+                    else "Водяних знаків не виявлено."
+                )
+            )
         ),
         meta={
             "watermarkCount": len(watermark_marks),
             "strongWatermarkCount": len(strong_watermark_hits),
-            "apparelStrongCount": len(apparel_strong_hits),
-            "skippedForScene": not watermark_allowed,
+            "blockingWatermarkCount": len(blocking_watermark_hits),
+            "hasTextEvidence": watermark_text_evidence,
             "sceneType": scene_type,
             "apparelMode": is_apparel,
+            "blocking": watermark_blocking,
+            "needsReview": watermark_detected and not watermark_blocking,
         },
     )
 
-    non_apparel_penalty = 25 if apparel_source == "ml" and apparel_confidence >= 0.70 else 12
+    non_apparel_blocking = (
+        not is_apparel
+        and apparel_source == "ml"
+        and apparel_confidence >= NON_APPAREL_BLOCK_CONFIDENCE
+    )
+    non_apparel_review = not is_apparel and not non_apparel_blocking
     ctx.add_rule_result(
         rule_id="NON_APPAREL",
         passed=is_apparel,
-        severity="medium" if apparel_source == "ml" else "low",
-        penalty=non_apparel_penalty if not is_apparel else 0,
+        severity="high" if non_apparel_blocking else ("medium" if non_apparel_review else "low"),
+        penalty=35 if non_apparel_blocking else (12 if non_apparel_review else 0),
         title="Не схоже на дизайн одягу",
         message=(
-            "Зображення більше схоже на постер або обкладинку."
-            if not is_apparel
-            else "Зображення виглядає як дизайн одягу."
+            "ML з високою впевненістю визначив, що зображення не є apparel-дизайном."
+            if non_apparel_blocking
+            else (
+                "Зображення може бути non-apparel, потрібна ручна перевірка."
+                if non_apparel_review
+                else "Зображення виглядає як дизайн одягу."
+            )
         ),
         meta={
             "is_apparel": is_apparel,
             "source": apparel_source,
             "confidence": round(apparel_confidence, 4),
+            "blocking": non_apparel_blocking,
+            "needsReview": non_apparel_review,
+            "threshold": NON_APPAREL_BLOCK_CONFIDENCE,
         },
     )
 

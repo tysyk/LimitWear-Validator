@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from explain.annotate import create_annotated_artifact
+
 
 SEVERITY_ORDER = {"high": 0, "medium": 1, "low": 2}
 
@@ -30,10 +32,12 @@ def _apparel_signal_line(ctx) -> str | None:
 
     confidence = _format_confidence(apparel_ml.get("confidence", scene.get("apparel_confidence")))
     source = scene.get("apparel_source", "unknown")
+    reliable = apparel_ml.get("isReliable")
+    reliability = "надійний" if reliable else "невпевнений"
 
     if confidence:
-        return f"ML-сигнал одягу: {label} ({confidence}, source={source})."
-    return f"Сигнал типу зображення: {label} (source={source})."
+        return f"ML apparel signal: {label} ({confidence}, {reliability}, source={source})."
+    return f"Сигнал типу зображення: {label} ({reliability}, source={source})."
 
 
 def _quality_line(ctx) -> str | None:
@@ -42,12 +46,20 @@ def _quality_line(ctx) -> str | None:
         return None
 
     if not quality.get("passed_resolution", True):
-        return "Якість вхідного зображення обмежує надійність перевірки: роздільна здатність нижча за мінімальну."
+        return "Якість вхідного зображення обмежує автоматичну перевірку: роздільна здатність нижча за мінімальну."
 
     if not quality.get("passed_blur", True):
-        return "Якість вхідного зображення обмежує надійність перевірки: зображення розмите."
+        return "Якість вхідного зображення обмежує автоматичну перевірку: зображення розмите."
 
     return None
+
+
+def _blocking_violations(ctx):
+    return [
+        violation
+        for violation in ctx.violations or []
+        if (violation.get("meta") or {}).get("blocking")
+    ]
 
 
 def run(ctx) -> None:
@@ -56,15 +68,18 @@ def run(ctx) -> None:
     verdict = ctx.verdict
     violations = sorted(ctx.violations or [], key=_finding_sort_key)
     review_reason = (ctx.debug or {}).get("need_review_reason")
+    fail_reason = (ctx.debug or {}).get("fail_reason")
 
     if verdict == "PASS":
-        ctx.add_explain("Автоматична перевірка пройдена, критичних порушень не виявлено.")
+        ctx.add_explain("Автоматична перевірка пройдена. Блокуючих ризиків не виявлено.")
     elif verdict == "WARN":
-        ctx.add_explain("Автоматична перевірка завершена із зауваженнями перед публікацією.")
+        ctx.add_explain("Автоматична перевірка завершена з неблокуючими зауваженнями.")
     elif verdict == "FAIL":
-        ctx.add_explain("Автоматична перевірка не пройдена через критичні або блокуючі порушення.")
+        ctx.add_explain("Автоматична перевірка не пройдена, тому що підтверджено блокуючий ризик.")
+        if fail_reason:
+            ctx.add_explain(f"Блокуюча причина: {fail_reason}")
     elif verdict == "NEED_REVIEW":
-        ctx.add_explain("Автоматична перевірка не дала фінального рішення, потрібна ручна перевірка.")
+        ctx.add_explain("Потрібна ручна перевірка перед фінальним рішенням.")
     elif verdict == "ERROR":
         ctx.add_explain("Під час аналізу сталася технічна помилка.")
         if ctx.errors:
@@ -76,11 +91,17 @@ def run(ctx) -> None:
     if apparel_line:
         ctx.add_explain(apparel_line)
 
-    if review_reason and verdict == "NEED_REVIEW":
-        ctx.add_explain(f"Причина ескалації: {review_reason}")
+    scene = ctx.scene or {}
+    apparel_ml = (ctx.ml or {}).get("apparel", {})
+    if scene.get("type") == "unknown" and not apparel_ml.get("isReliable", False):
+        ctx.add_explain("Потрібна ручна перевірка через невпевнене визначення типу зображення.")
 
-    for violation in violations[:3]:
-        title = violation.get("title", "Порушення")
+    if review_reason and verdict == "NEED_REVIEW":
+        ctx.add_explain(f"Причина ручної перевірки: {review_reason}")
+
+    visible_findings = _blocking_violations(ctx) if verdict == "FAIL" else violations
+    for violation in visible_findings[:3]:
+        title = violation.get("title", "Finding")
         message = violation.get("message", "")
         ctx.add_explain(f"{title}: {message}" if message else title)
 
@@ -89,12 +110,18 @@ def run(ctx) -> None:
         ctx.add_explain(quality_line)
 
     if verdict == "PASS":
-        ctx.add_explain("Цей кейс можна показувати як позитивний приклад у демо.")
+        ctx.add_explain("Цей результат підходить для демо як чистий apparel-кейс.")
     elif verdict == "WARN":
-        ctx.add_explain("Перед публікацією бажано виправити зауваження і повторити перевірку.")
+        ctx.add_explain("Заявку можна продовжити, але зауваження варто перевірити перед публікацією.")
     elif verdict == "FAIL":
-        ctx.add_explain("Потрібно усунути блокуючі проблеми перед повторною подачею.")
+        ctx.add_explain("Потрібно усунути блокуючий ризик і повторити перевірку.")
     elif verdict == "NEED_REVIEW":
-        ctx.add_explain("Для демо цей кейс підходить як приклад ручної ескалації та пояснюваного рішення.")
+        ctx.add_explain("Це кейс для ручної ескалації, а не автоматичне відхилення.")
+
+    try:
+        create_annotated_artifact(ctx)
+    except Exception as exc:
+        ctx.add_warning(f"Annotated artifact was not created: {exc}")
+        ctx.merge_debug_section("artifacts", {"annotated": "failed", "error": str(exc)})
 
     ctx.mark_step_done("explain")

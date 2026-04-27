@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+from core.config import APPAREL_CONFIDENCE_THRESHOLD
 
-RELIABLE_APPAREL_CONFIDENCE = 0.65
+RELIABLE_APPAREL_CONFIDENCE = APPAREL_CONFIDENCE_THRESHOLD
 
 
 def run(ctx) -> None:

@@ -3,6 +3,8 @@ from __future__ import annotations
 import cv2
 import numpy as np
 
+from core.config import APPAREL_CONFIDENCE_THRESHOLD
+
 
 def run(ctx) -> None:
     try:
@@ -47,9 +49,21 @@ def run(ctx) -> None:
         if not isinstance(ctx.scene, dict):
             ctx.scene = {}
 
+        apparel_ml = (ctx.ml or {}).get("apparel", {})
+        ml_label = str(apparel_ml.get("label", "unknown"))
+        ml_confidence = float(apparel_ml.get("confidence", 0.0) or 0.0)
+        ml_reliable = bool(apparel_ml.get("isReliable", ml_confidence >= APPAREL_CONFIDENCE_THRESHOLD))
+
+        if ml_label == "apparel" and ml_reliable:
+            scene_type = "apparel"
+            confidence = ml_confidence
+            ctx.scene["is_apparel"] = True
+            ctx.scene["type_source"] = "ml_apparel"
+        else:
+            ctx.scene["type_source"] = "heuristic_metadata"
+
         ctx.scene["type"] = scene_type
         ctx.scene["confidence"] = round(confidence, 4)
-        ctx.scene["type_source"] = "heuristic_metadata"
         ctx.scene["signals"] = {
             "edge_ratio": round(edge_ratio, 4),
             "colorfulness": round(colorfulness, 2),
@@ -66,6 +80,7 @@ def run(ctx) -> None:
             {
                 "type": scene_type,
                 "confidence": round(confidence, 4),
+                "typeSource": ctx.scene.get("type_source"),
                 "signals": ctx.scene["signals"],
                 "isApparelFromML": ctx.scene.get("apparel_source") == "ml",
             },

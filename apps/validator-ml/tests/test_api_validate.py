@@ -56,6 +56,17 @@ def _fake_pipeline(ctx) -> None:
     "API runtime is unavailable",
 )
 class AnalyzeApiTests(unittest.TestCase):
+    def test_analyze_invalid_file_returns_400(self):
+        client = TestClient(app)
+
+        response = client.post(
+            "/analyze",
+            files={"file": ("bad.txt", b"not an image", "text/plain")},
+            data={"profile_id": "demo"},
+        )
+
+        self.assertEqual(response.status_code, 400)
+
     @patch("api.routes.run_pipeline", side_effect=_fake_pipeline)
     def test_analyze_endpoint_returns_presentation_ready_summary(self, _mocked_pipeline):
         client = TestClient(app)
@@ -76,3 +87,28 @@ class AnalyzeApiTests(unittest.TestCase):
         self.assertIn("summary", body)
         self.assertEqual(body["summary"]["apparelSignal"]["label"], "apparel")
         self.assertEqual(body["summary"]["decision"], "PASS")
+
+        expected_keys = {
+            "analysisId",
+            "profileId",
+            "summary",
+            "input",
+            "quality",
+            "scene",
+            "roi",
+            "moderation",
+            "detections",
+            "ml",
+            "ruleResults",
+            "score",
+            "verdict",
+            "violations",
+            "explain",
+            "artifacts",
+            "debug",
+            "warnings",
+            "errors",
+            "stepsCompleted",
+            "timings",
+        }
+        self.assertTrue(expected_keys.issubset(body.keys()))

@@ -6,6 +6,7 @@ __pycache__/
 # Data
 data/uploads/
 data/results/
+apps/validator-ml/artifacts/
 
 # OS
 Thumbs.db

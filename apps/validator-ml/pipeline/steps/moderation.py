@@ -24,7 +24,11 @@ def run(ctx) -> None:
                     penalty=100,
                     title="Заборонений контент",
                     message=f"Спрацювала модерація: {label.get('label', 'unknown')}",
-                    meta={"evidence": label.get("evidence", [])},
+                    meta={
+                        "evidence": label.get("evidence", []),
+                        "blocking": True,
+                        "riskType": "moderation",
+                    },
                 )
 
         ctx.debug["need_review_reason"] = None
@@ -34,6 +38,6 @@ def run(ctx) -> None:
         return
 
     if ctx.moderation.get("needsReview"):
-        ctx.debug["need_review_reason"] = "Low moderation confidence because image quality is poor"
+        ctx.debug["need_review_reason"] = "Moderation signals need manual review"
 
     ctx.mark_step_done("moderation")
