@@ -1,13 +1,49 @@
-# Python
+# =========================
+# PYTHON
+# =========================
 __pycache__/
 *.pyc
+*.pyo
+*.pyd
+*.log
 .venv/
+env/
+venv/
 
-# Data
+# =========================
+# DATASETS (ДУЖЕ ВАЖЛИВО)
+# =========================
+apps/validator-ml/ml/datasets/
+
+# =========================
+# ML WEIGHTS (можна залишити тільки best)
+# =========================
+apps/validator-ml/ml/weights/*
+!apps/validator-ml/ml/weights/apparel/
+!apps/validator-ml/ml/weights/apparel/best.pt
+
+# =========================
+# RUNTIME DATA
+# =========================
 data/uploads/
 data/results/
 apps/validator-ml/artifacts/
 
+# =========================
+# TEMP / CACHE
+# =========================
+*.tmp
+*.cache
+*.bak
+
+# =========================
+# IDE
+# =========================
+.vscode/
+.idea/
+
+# =========================
 # OS
+# =========================
 Thumbs.db
 .DS_Store

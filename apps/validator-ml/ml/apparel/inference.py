@@ -8,9 +8,12 @@ import cv2
 
 try:
     import torch
-    from torchvision import transforms
-except Exception as exc:  # pragma: no cover - depends on local ML runtime
+    import torch.nn as nn
+    from torchvision import models, transforms
+except Exception as exc:
     torch = None
+    nn = None
+    models = None
     transforms = None
     IMPORT_ERROR = exc
 else:
@@ -20,7 +23,8 @@ else:
 DEVICE = "cuda" if torch is not None and torch.cuda.is_available() else "cpu"
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-WEIGHTS_PATH = os.path.join(BASE_DIR, "../weights/apparel_resnet18.pth")
+WEIGHTS_PATH = os.path.join(BASE_DIR, "../weights/apparel/best.pt")
+
 CLASS_NAMES = ["apparel", "non_apparel"]
 
 
@@ -48,16 +52,19 @@ def _get_transform():
 @lru_cache(maxsize=1)
 def _get_model():
     _ensure_runtime()
-    from ml.apparel.model import get_model
 
     if not os.path.exists(WEIGHTS_PATH):
         raise FileNotFoundError(f"Apparel weights were not found: {WEIGHTS_PATH}")
 
-    model = get_model()
+    model = models.resnet18(weights=None)
+    model.fc = nn.Linear(model.fc.in_features, len(CLASS_NAMES))
+
     state_dict = torch.load(WEIGHTS_PATH, map_location=DEVICE)
     model.load_state_dict(state_dict)
+
     model.to(DEVICE)
     model.eval()
+
     return model
 
 
@@ -85,5 +92,6 @@ def predict_apparel(image_bgr) -> Dict[str, Any]:
         "label": CLASS_NAMES[pred_index],
         "confidence": round(confidence, 4),
         "scores": score_map,
-        "model": "resnet18_apparel_v1",
+        "model": "resnet18_apparel_v2",
+        "weights": "ml/weights/apparel/best.pt",
     }

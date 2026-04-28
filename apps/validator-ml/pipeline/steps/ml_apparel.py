@@ -18,11 +18,12 @@ def run(ctx) -> None:
         result = predict_apparel(ctx.bgr)
         confidence = float(result.get("confidence", 0.0) or 0.0)
         label = str(result.get("label", "unknown"))
-        is_apparel = label == "apparel"
+        is_reliable = confidence >= RELIABLE_APPAREL_CONFIDENCE
+        is_apparel = label == "apparel" and is_reliable
 
         enriched_result = {
             **result,
-            "isReliable": confidence >= RELIABLE_APPAREL_CONFIDENCE,
+            "isReliable": is_reliable,
             "threshold": RELIABLE_APPAREL_CONFIDENCE,
             "source": "ml",
         }
