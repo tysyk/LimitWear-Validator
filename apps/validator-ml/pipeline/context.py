@@ -151,6 +151,17 @@ class PipelineContext:
             "source": scene.get("apparel_source", "unknown"),
             "reliable": reliable,
         }
+    
+    def _build_apparel_type_signal(self) -> Dict[str, Any]:
+        scene = self.scene or {}
+        apparel_type_ml = self.ml.get("apparel_type", {}) if isinstance(self.ml, dict) else {}
+
+        return {
+            "label": apparel_type_ml.get("label") or scene.get("apparel_type") or "unknown",
+            "confidence": apparel_type_ml.get("confidence", scene.get("apparel_type_confidence")),
+            "source": scene.get("apparel_type_source", "unknown"),
+            "reliable": apparel_type_ml.get("isReliable"),
+        }
 
     def _build_summary(self, ordered_violations: List[Dict[str, Any]]) -> Dict[str, Any]:
         headlines = {
@@ -188,6 +199,7 @@ class PipelineContext:
             "sceneType": (self.scene or {}).get("type"),
             "reviewReason": (self.debug or {}).get("need_review_reason"),
             "apparelSignal": self._build_apparel_signal(),
+            "apparelTypeSignal": self._build_apparel_type_signal(),
             "primaryFindings": top_findings,
             "nextAction": next_actions.get(self.verdict, "Review the response details."),
         }

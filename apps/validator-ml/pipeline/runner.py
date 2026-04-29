@@ -4,6 +4,7 @@ import time
 
 from pipeline.steps.quality_gate import run as quality_gate
 from pipeline.steps.ml_apparel import run as ml_apparel
+from pipeline.steps.ml_apparel_type import run as ml_apparel_type
 from pipeline.steps.roi_extract import run as roi_extract
 from pipeline.steps.detectors import run as detectors
 from pipeline.steps.scene_type import run as scene_type
@@ -32,6 +33,7 @@ def _run_step(ctx, step_name: str, step_fn, *, force: bool = False) -> None:
 def run_pipeline(ctx):
     _run_step(ctx, "quality_gate", quality_gate)
     _run_step(ctx, "ml_apparel", ml_apparel)
+    _run_step(ctx, "ml_apparel_type", ml_apparel_type)
     _run_step(ctx, "roi_extract", roi_extract)
     _run_step(ctx, "detectors", detectors)
     _run_step(ctx, "scene_type", scene_type)

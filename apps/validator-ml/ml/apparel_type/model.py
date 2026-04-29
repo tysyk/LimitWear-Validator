@@ -2,7 +2,7 @@ import torch.nn as nn
 from torchvision import models
 
 
-def get_model(num_classes: int = 2, pretrained_backbone: bool = False):
+def get_model(num_classes: int, pretrained_backbone: bool = False):
     weights = models.ResNet18_Weights.DEFAULT if pretrained_backbone else None
 
     model = models.resnet18(weights=weights)
