@@ -40,7 +40,6 @@ def _apparel_signal_line(ctx) -> str | None:
     return f"Сигнал типу зображення: {label} ({reliability}, source={source})."
 
 
-# 🔥 НОВЕ
 def _apparel_type_line(ctx) -> str | None:
     scene = ctx.scene or {}
     apparel_type_ml = (ctx.ml or {}).get("apparel_type", {})
@@ -56,6 +55,21 @@ def _apparel_type_line(ctx) -> str | None:
     if confidence:
         return f"Тип одягу: {label} ({confidence}, ML)."
     return f"Тип одягу: {label} (ML)."
+
+
+def _logo_line(ctx):
+    ml = (ctx.ml or {}).get("logo_presence", {})
+
+    label = ml.get("label")
+    conf = ml.get("confidence")
+
+    if not label or label == "unknown":
+        return None
+
+    if conf:
+        return f"Наявність логотипа: {label} ({round(conf*100,1)}%, ML)."
+
+    return f"Наявність логотипа: {label} (ML)."
 
 
 def _quality_line(ctx) -> str | None:
@@ -105,15 +119,17 @@ def run(ctx) -> None:
         ctx.mark_step_done("explain")
         return
 
-    # ✔ apparel
     apparel_line = _apparel_signal_line(ctx)
     if apparel_line:
         ctx.add_explain(apparel_line)
 
-    # 🔥 apparel_type (НОВЕ)
     apparel_type_line = _apparel_type_line(ctx)
     if apparel_type_line:
         ctx.add_explain(apparel_type_line)
+
+    logo_line = _logo_line(ctx)
+    if logo_line:
+        ctx.add_explain(logo_line)
 
     scene = ctx.scene or {}
     apparel_ml = (ctx.ml or {}).get("apparel", {})

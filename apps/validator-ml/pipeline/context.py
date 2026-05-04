@@ -162,6 +162,16 @@ class PipelineContext:
             "source": scene.get("apparel_type_source", "unknown"),
             "reliable": apparel_type_ml.get("isReliable"),
         }
+    
+    def _build_logo_signal(self):
+        ml = self.ml.get("logo_presence", {})
+
+        return {
+            "label": ml.get("label"),
+            "confidence": ml.get("confidence"),
+            "hasLogo": ml.get("isLogo"),
+            "reliable": ml.get("isReliable"),
+        }
 
     def _build_summary(self, ordered_violations: List[Dict[str, Any]]) -> Dict[str, Any]:
         headlines = {
@@ -200,6 +210,7 @@ class PipelineContext:
             "reviewReason": (self.debug or {}).get("need_review_reason"),
             "apparelSignal": self._build_apparel_signal(),
             "apparelTypeSignal": self._build_apparel_type_signal(),
+            "logoSignal": self._build_logo_signal(),
             "primaryFindings": top_findings,
             "nextAction": next_actions.get(self.verdict, "Review the response details."),
         }

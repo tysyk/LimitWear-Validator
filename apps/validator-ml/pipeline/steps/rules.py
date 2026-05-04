@@ -310,6 +310,36 @@ def run(ctx) -> None:
             "blocking": False,
         },
     )
+    
+    brand_risk = detections.get("ml_brand_risk") or {}
+
+    if not brand_risk.get("skipped"):
+        label = brand_risk.get("label")
+        confidence = float(brand_risk.get("confidence", 0.0) or 0.0)
+        is_reliable = bool(brand_risk.get("isReliable", False))
+        risk_level = brand_risk.get("riskLevel")
+
+        if label == "brand_logo":
+            ctx.add_rule_result(
+                rule_id="ML_BRAND_LOGO",
+                passed=False,
+                severity="medium",
+                penalty=14 if confidence >= 0.85 else 8,
+                title="ML: підозра на бренд-логотип",
+                message=(
+                    f"ML визначив брендоподібний логотип (confidence={confidence:.2f})."
+                    if is_reliable
+                    else f"Можлива підозра на бренд-логотип (confidence={confidence:.2f})."
+                ),
+                meta={
+                    "confidence": confidence,
+                    "isReliable": is_reliable,
+                    "riskLevel": risk_level,
+                    "blocking": False,
+                    "needsReview": True,
+                    "source": "ml_brand_risk",
+                },
+            )
 
     if scene_type not in ["text_heavy_cover", "poster_like"] or is_apparel:
         strong_centered = []
@@ -332,6 +362,15 @@ def run(ctx) -> None:
 
         confirmed_ip = _confirmed_ip(ip)
         strong_suspicious_ip = _strong_suspicious_ip(ip)
+        logo_ml = (ctx.ml or {}).get("logo_presence", {})
+        logo_ml_label = logo_ml.get("label")
+        logo_ml_confidence = logo_ml.get("confidence")
+        logo_ml_reliable = bool(logo_ml.get("isReliable", False))
+
+        logo_ml_conflict = bool(
+            strong_centered
+            and not logo_ml_reliable
+        )
 
         if strong_centered:
             top = strong_centered[0]
@@ -355,6 +394,11 @@ def run(ctx) -> None:
                     "hasStrongSuspiciousIp": strong_suspicious_ip,
                     "needsReview": not blocking,
                     "riskType": "visual_logo_shape",
+
+                    "logoMlLabel": logo_ml_label,
+                    "logoMlConfidence": logo_ml_confidence,
+                    "logoMlReliable": logo_ml_reliable,
+                    "logoConflict": not logo_ml_reliable,
                 },
             )
         elif len(medium_marks) >= 3:
