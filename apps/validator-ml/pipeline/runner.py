@@ -7,6 +7,7 @@ from pipeline.steps.ml_apparel import run as ml_apparel
 from pipeline.steps.ml_apparel_type import run as ml_apparel_type
 from pipeline.steps.ml_logo_presence import run as ml_logo_presence
 from pipeline.steps.ml_brand_risk import run as ml_brand_risk
+from pipeline.steps.ml_adult_safety import run as ml_adult_safety
 from pipeline.steps.roi_extract import run as roi_extract
 from pipeline.steps.detectors import run as detectors
 from pipeline.steps.scene_type import run as scene_type
@@ -38,6 +39,7 @@ def run_pipeline(ctx):
     _run_step(ctx, "ml_apparel_type", ml_apparel_type)
     _run_step(ctx, "ml_logo_presence", ml_logo_presence)
     _run_step(ctx, "ml_brand_risk", ml_brand_risk)
+    _run_step(ctx, "ml_adult_safety", ml_adult_safety)
     _run_step(ctx, "roi_extract", roi_extract)
     _run_step(ctx, "detectors", detectors)
     _run_step(ctx, "scene_type", scene_type)

@@ -289,6 +289,38 @@ def run(ctx) -> None:
             message="Текстових IP-збігів не виявлено.",
         )
 
+    adult_safety = detections.get("ml_adult_safety") or {}
+
+    if adult_safety:
+        label = adult_safety.get("label")
+        adult_score = float(adult_safety.get("adultScore", 0.0) or 0.0)
+        risk_level = adult_safety.get("riskLevel")
+        is_reliable = bool(adult_safety.get("isReliable", False))
+
+        if label == "adult_risk":
+            blocking = risk_level == "block" and is_reliable
+
+            ctx.add_rule_result(
+                rule_id="ML_ADULT_RISK",
+                passed=False,
+                severity="high" if blocking else "medium",
+                penalty=45 if blocking else 18,
+                title="ML: adult/NSFW ризик",
+                message=(
+                    f"ML виявив високий adult/NSFW ризик (score={adult_score:.2f})."
+                    if blocking
+                    else f"ML виявив можливий adult/NSFW ризик (score={adult_score:.2f})."
+                ),
+                meta={
+                    "adultScore": adult_score,
+                    "riskLevel": risk_level,
+                    "isReliable": is_reliable,
+                    "blocking": blocking,
+                    "needsReview": not blocking,
+                    "source": "ml_adult_safety",
+                },
+            )
+
     logo_like_allowed = scene_type not in ["text_heavy_cover", "poster_like"] or is_apparel
     logo_like_review = logo_like_allowed and len(logo_like) >= logo_like_threshold
     ctx.add_rule_result(
