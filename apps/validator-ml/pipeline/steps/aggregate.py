@@ -163,7 +163,17 @@ def run(ctx) -> None:
         ctx.mark_step_done("aggregate")
         return
 
-    if med_count >= 1 or low_count >= 1 or ctx.score < 75:
+    if ctx.score < 75:
+        ctx.set_verdict("WARN")
+        ctx.mark_step_done("aggregate")
+        return
+
+    if med_count >= 2 and ctx.score < 90:
+        ctx.set_verdict("WARN")
+        ctx.mark_step_done("aggregate")
+        return
+
+    if low_count >= 3 and ctx.score < 90:
         ctx.set_verdict("WARN")
         ctx.mark_step_done("aggregate")
         return

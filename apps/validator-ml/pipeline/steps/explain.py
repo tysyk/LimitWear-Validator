@@ -150,7 +150,7 @@ def run(ctx) -> None:
         ctx.add_explain(quality_line)
 
     if verdict == "PASS":
-        ctx.add_explain("Цей результат підходить для демо як чистий apparel-кейс.")
+        ctx.add_explain("Зображення можна пропустити до наступного етапу перевірки або публікації.")
     elif verdict == "WARN":
         ctx.add_explain("Заявку можна продовжити, але зауваження варто перевірити перед публікацією.")
     elif verdict == "FAIL":

@@ -114,6 +114,7 @@ def moderate_image_and_text(
     violence_review_hits = _find_matches(merged_text, VIOLENCE_REVIEW_TERMS)
     self_harm_hits = _find_matches(merged_text, SELF_HARM_TERMS)
     brand_hits = _find_matches(merged_text, BRAND_TERMS)
+    adult_ml = detections.get("adultSafety") or {}
 
     labels: List[Dict[str, Any]] = []
 
@@ -148,6 +149,24 @@ def moderate_image_and_text(
 
     if brand_hits:
         push_label("brand_text_detected", 0.80, False, brand_hits)
+
+    adult_label = str(adult_ml.get("label", "")).lower()
+    adult_confidence = float(adult_ml.get("confidence", 0.0) or 0.0)
+
+    if adult_label in {
+        "sexual",
+        "nsfw",
+        "explicit",
+        "anime_sexualized",
+        "ecchi",
+    } and adult_confidence >= 0.55:
+        push_label(
+            "adult_visual_content",
+            adult_confidence,
+            False,
+            [adult_label],
+            needs_review=True,
+        )
 
     blur_score = float(quality.get("blur_score", 0.0) or 0.0)
     if blur_score < 20:
