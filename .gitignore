@@ -6,27 +6,42 @@ __pycache__/
 *.pyo
 *.pyd
 *.log
+
 .venv/
 env/
 venv/
 
 # =========================
-# DATASETS (ДУЖЕ ВАЖЛИВО)
+# DATASETS
 # =========================
-apps/validator-ml/ml/datasets/
+apps/validator-ml/datasets/
 
 # =========================
-# ML WEIGHTS (можна залишити тільки best)
+# ML WEIGHTS
 # =========================
-apps/validator-ml/ml/weights/*
-!apps/validator-ml/ml/weights/apparel/
-!apps/validator-ml/ml/weights/apparel/best.pt
+apps/validator-ml/weights/*
+
+# keep structure
+!apps/validator-ml/weights/.gitkeep
+
+# keep selected weights
+!apps/validator-ml/weights/apparel/
+!apps/validator-ml/weights/apparel/best.pt
+
+!apps/validator-ml/weights/logo_presence/
+!apps/validator-ml/weights/logo_presence/best.pt
+!apps/validator-ml/weights/logo_presence/labels.json
+
+!apps/validator-ml/weights/apparel_type/
+!apps/validator-ml/weights/apparel_type/best.pt
+!apps/validator-ml/weights/apparel_type/labels.json
 
 # =========================
 # RUNTIME DATA
 # =========================
-data/uploads/
-data/results/
+apps/validator-ml/data/uploads/
+apps/validator-ml/data/results/
+
 apps/validator-ml/artifacts/
 
 # =========================

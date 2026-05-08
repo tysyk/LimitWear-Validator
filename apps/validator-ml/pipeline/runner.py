@@ -6,7 +6,7 @@ from pipeline.steps.quality_gate import run as quality_gate
 from pipeline.steps.ml_apparel import run as ml_apparel
 from pipeline.steps.ml_apparel_type import run as ml_apparel_type
 from pipeline.steps.ml_logo_presence import run as ml_logo_presence
-from pipeline.steps.ml_brand_risk import run as ml_brand_risk
+from pipeline.steps.ml_brand_crop_classifier import run as ml_brand_crop_classifier
 from pipeline.steps.ml_adult_safety import run as ml_adult_safety
 from pipeline.steps.roi_extract import run as roi_extract
 from pipeline.steps.detectors import run as detectors
@@ -22,6 +22,7 @@ def _run_step(ctx, step_name: str, step_fn, *, force: bool = False) -> None:
         return
 
     started = time.perf_counter()
+
     try:
         step_fn(ctx)
     except Exception as e:
@@ -38,13 +39,17 @@ def run_pipeline(ctx):
     _run_step(ctx, "ml_apparel", ml_apparel)
     _run_step(ctx, "ml_apparel_type", ml_apparel_type)
     _run_step(ctx, "ml_logo_presence", ml_logo_presence)
-    _run_step(ctx, "ml_brand_risk", ml_brand_risk)
-    _run_step(ctx, "ml_adult_safety", ml_adult_safety)
+
     _run_step(ctx, "roi_extract", roi_extract)
     _run_step(ctx, "detectors", detectors)
+
+    _run_step(ctx, "ml_brand_crop_classifier", ml_brand_crop_classifier)
+    _run_step(ctx, "ml_adult_safety", ml_adult_safety)
+
     _run_step(ctx, "scene_type", scene_type)
     _run_step(ctx, "moderation", moderation)
     _run_step(ctx, "rules", rules)
     _run_step(ctx, "aggregate", aggregate, force=True)
     _run_step(ctx, "explain", explain, force=True)
+
     return ctx

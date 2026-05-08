@@ -115,8 +115,8 @@ def run(ctx) -> None:
         ctx.mark_step_done("aggregate")
         return
 
-    if ip.get("blocked") or ip.get("exactHits"):
-        _set_fail(ctx, "Підтверджений IP/brand ризик.")
+    if ip.get("blocked"):
+        _set_fail(ctx, "Підтверджений IP-ризик.")
         ctx.mark_step_done("aggregate")
         return
 

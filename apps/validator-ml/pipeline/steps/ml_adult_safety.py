@@ -1,4 +1,4 @@
-from ml.adult_safety.inference import predict_adult_safety
+from ml.adult_safety.inference_adult_safety import predict_adult_safety
 
 
 def run(ctx):

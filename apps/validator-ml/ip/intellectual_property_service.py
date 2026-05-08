@@ -149,21 +149,34 @@ def analyze_ip_risk(
         h for h in all_hits
         if h["matchKind"] in {"exact_substring", "exact_fuzzy"}
     ]
+    
     suspicious_hits = [
         h for h in all_hits
         if h["matchKind"] == "suspicious_fuzzy"
     ]
 
-    blocked = any(h["type"] in {"brand", "character", "franchise", "slogan"} for h in exact_hits)
-    needs_review = len(suspicious_hits) > 0
+    blocking_exact_hits = [
+        h for h in exact_hits
+        if h["type"] in {"character", "franchise"}
+    ]
+
+    review_hits = [
+        h for h in exact_hits + suspicious_hits
+        if h["type"] in {"brand", "slogan"}
+    ]
+
+    blocked = len(blocking_exact_hits) > 0
+    needs_review = len(review_hits) > 0 or len(suspicious_hits) > 0
 
     return {
         "blocked": blocked,
-        "needsReview": needs_review and not blocked,
+        "needsReview": needs_review,
         "brandTextHits": brand_hits,
         "characterHits": character_hits,
         "franchiseHits": franchise_hits,
         "sloganHits": slogan_hits,
         "exactHits": exact_hits,
         "suspiciousHits": suspicious_hits,
+        "blockingHits": blocking_exact_hits,
+        "reviewHits": review_hits,
     }

@@ -39,32 +39,76 @@ def _has_watermark_text_evidence(ocr_items: List[Dict[str, Any]]) -> bool:
 
 
 def _get_known_brand_signal(ctx, detections: Dict[str, Any]) -> Dict[str, Any]:
-    """
-    Future-ready block for new brand ML.
-
-    Expected future format:
-    ctx.ml["brand_classifier"] = {
-        "label": "nike" | "adidas" | "gucci" | "other_logo" | "no_brand",
-        "confidence": 0.0-1.0,
-        "isReliable": bool,
-        "source": "ml_brand_classifier"
-    }
-
-    Current fallback:
-    - moderation_service can detect OCR brand text.
-    - old ml_brand_risk stays only as weak signal.
-    """
     ml = ctx.ml or {}
     moderation = ctx.moderation or {}
 
-    brand_classifier = ml.get("brand_classifier") or ml.get("brand_detection") or {}
-    if brand_classifier:
-        label = str(brand_classifier.get("label", "unknown")).lower()
-        confidence = float(brand_classifier.get("confidence", 0.0) or 0.0)
-        reliable = bool(brand_classifier.get("isReliable", False))
+    brand_crop_classifier = ml.get("brand_crop_classifier") or {}
 
-        known_brand = label not in {"", "unknown", "other_logo", "no_brand", "none"}
-        if known_brand and reliable and confidence >= 0.80:
+    if brand_crop_classifier:
+        label = str(
+            brand_crop_classifier.get("label", "unknown")
+        ).lower()
+
+        brand_label = str(
+            brand_crop_classifier.get("brand_label")
+            or brand_crop_classifier.get("raw_label")
+            or label
+        ).lower()
+
+        confidence = float(
+            brand_crop_classifier.get("confidence", 0.0) or 0.0
+        )
+
+        reliable = bool(
+            brand_crop_classifier.get("isReliable", False)
+        )
+
+        if (
+            label == "brand"
+            and reliable
+            and confidence >= 0.95
+        ):
+            return {
+                "detected": True,
+                "source": "brand_crop_classifier",
+                "label": brand_label,
+                "confidence": confidence,
+                "evidence": [brand_label],
+            }
+
+    brand_classifier = (
+        ml.get("brand_classifier")
+        or ml.get("brand_detection")
+        or {}
+    )
+
+    if brand_classifier:
+        label = str(
+            brand_classifier.get("label", "unknown")
+        ).lower()
+
+        confidence = float(
+            brand_classifier.get("confidence", 0.0) or 0.0
+        )
+
+        reliable = bool(
+            brand_classifier.get("isReliable", False)
+        )
+
+        known_brand = label not in {
+            "",
+            "unknown",
+            "other_logo",
+            "no_brand",
+            "none",
+        }
+
+        if (
+            label == "brand"
+            and reliable
+            and confidence >= 0.95
+            and brand_crop_classifier.get("used_fallback") is False
+        ):
             return {
                 "detected": True,
                 "source": "brand_classifier",
@@ -74,9 +118,12 @@ def _get_known_brand_signal(ctx, detections: Dict[str, Any]) -> Dict[str, Any]:
             }
 
     brand_text_hits: List[str] = []
+
     for label in moderation.get("labels", []) or []:
         if label.get("label") == "brand_text_detected":
-            brand_text_hits.extend(label.get("evidence", []) or [])
+            brand_text_hits.extend(
+                label.get("evidence", []) or []
+            )
 
     if brand_text_hits:
         return {
@@ -178,19 +225,44 @@ def run(ctx) -> None:
         },
     )
 
-    # 3. Confirmed IP text/risk from IP analyzer blocks.
+    # 3. Exact IP hits.
+    # Brand text does NOT auto-fail. It goes to manual review.
+    # Characters/franchises still block because they are stronger IP risks.
     for hit in ip.get("exactHits", []) or []:
-        hit_type = hit.get("type", "ip")
-        ctx.add_rule_result(
-            rule_id=f"IP_{str(hit_type).upper()}_EXACT",
-            passed=False,
-            severity="high",
-            penalty=50,
-            title="Підтверджений IP/brand ризик",
-            message=f"Знайдено підтверджений збіг: {hit.get('keyword')}",
-            bbox=hit.get("bbox"),
-            meta={**hit, "blocking": True, "needsReview": False, "riskType": "confirmed_ip"},
-        )
+        hit_type = str(hit.get("type", "ip")).lower()
+
+        if hit_type == "brand":
+            ctx.add_rule_result(
+                rule_id="IP_BRAND_REVIEW",
+                passed=False,
+                severity="medium",
+                penalty=10,
+                title="Виявлено бренд",
+                message=f"Знайдено бренд: {hit.get('keyword')}. Потрібна ручна перевірка прав.",
+                bbox=hit.get("bbox"),
+                meta={
+                    **hit,
+                    "blocking": False,
+                    "needsReview": True,
+                    "riskType": "brand_review",
+                },
+            )
+        else:
+            ctx.add_rule_result(
+                rule_id=f"IP_{hit_type.upper()}_EXACT",
+                passed=False,
+                severity="high",
+                penalty=50,
+                title="Підтверджений IP-ризик",
+                message=f"Знайдено підтверджений збіг: {hit.get('keyword')}",
+                bbox=hit.get("bbox"),
+                meta={
+                    **hit,
+                    "blocking": True,
+                    "needsReview": False,
+                    "riskType": "confirmed_ip",
+                },
+            )
 
     # 4. Suspicious IP goes to manual review.
     for hit in ip.get("suspiciousHits", []) or []:

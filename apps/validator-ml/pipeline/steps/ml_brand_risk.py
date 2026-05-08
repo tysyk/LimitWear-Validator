@@ -1,4 +1,4 @@
-from ml.brand_risk.inference import predict_brand_risk
+from ml.brand_risk.inference_brand_risk import predict_brand_risk
 
 
 def run(ctx):
