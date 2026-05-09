@@ -1,14 +1,10 @@
 from pathlib import Path
+import json
 
 import cv2
 import torch
 from PIL import Image
 from torchvision import transforms
-
-from ml.brand_classifier.crop_candidates_brand_classifier import (
-    extract_logo_crops,
-    fallback_chest_crops,
-)
 
 from ml.common.models.mobilenet_v3_classifier import (
     build_mobilenet_v3_classifier,
@@ -17,38 +13,45 @@ from ml.common.models.mobilenet_v3_classifier import (
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
-MODEL_PATH = (
-    PROJECT_ROOT
-    / "weights"
-    / "brand_crop_classifier"
-    / "brand_crop_classifier.pt"
-)
+WEIGHTS_DIR = PROJECT_ROOT / "weights" / "brand_crop_classifier"
+MODEL_PATH = WEIGHTS_DIR / "best.pt"
+LABELS_PATH = WEIGHTS_DIR / "labels.json"
 
+IMG_SIZE = 224
 CONFIDENCE_THRESHOLD = 0.75
-NO_BRAND_CLASS = "no_brand"
+
+NON_BRAND_CLASSES = {"no_brand", "unknown_logo"}
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 _model = None
-_class_names = None
-_img_size = 224
+_idx_to_label = None
+
+
+def _load_labels():
+    with open(LABELS_PATH, "r", encoding="utf-8") as file:
+        raw = json.load(file)
+
+    return {int(index): label for index, label in raw.items()}
 
 
 def _load_model():
     global _model
-    global _class_names
-    global _img_size
+    global _idx_to_label
 
     if _model is not None:
-        return
+        return _model, _idx_to_label
 
-    checkpoint = torch.load(MODEL_PATH, map_location=DEVICE)
+    _idx_to_label = _load_labels()
 
-    _class_names = checkpoint["class_names"]
-    _img_size = checkpoint.get("img_size", 224)
+    checkpoint = torch.load(
+        MODEL_PATH,
+        map_location=DEVICE,
+        weights_only=False,
+    )
 
     model = build_mobilenet_v3_classifier(
-        num_classes=len(_class_names),
+        num_classes=len(_idx_to_label),
     )
 
     model.load_state_dict(checkpoint["model_state"])
@@ -57,154 +60,118 @@ def _load_model():
 
     _model = model
 
+    return _model, _idx_to_label
 
-def _preprocess_bgr(bgr):
-    rgb = cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB)
-    image = Image.fromarray(rgb)
+
+def _preprocess_bgr(crop):
+    rgb = cv2.cvtColor(crop, cv2.COLOR_BGR2RGB)
+    image = Image.fromarray(rgb).convert("RGB")
 
     transform = transforms.Compose([
-        transforms.Resize((_img_size, _img_size)),
+        transforms.Resize((IMG_SIZE, IMG_SIZE)),
         transforms.ToTensor(),
         transforms.Normalize(
-            mean=[0.485, 0.456, 0.406],
-            std=[0.229, 0.224, 0.225],
+            [0.485, 0.456, 0.406],
+            [0.229, 0.224, 0.225],
         ),
     ])
 
     return transform(image).unsqueeze(0)
 
 
-def _predict_single_crop(crop_item):
-    crop = crop_item["crop"]
+def predict_single_crop(crop):
+    model, idx_to_label = _load_model()
+
     tensor = _preprocess_bgr(crop).to(DEVICE)
 
     with torch.no_grad():
-        outputs = _model(tensor)
-        probabilities = torch.softmax(outputs, dim=1)[0]
+        outputs = model(tensor)
+        probs = torch.softmax(outputs, dim=1)[0]
 
-    confidence_tensor, pred_idx_tensor = torch.max(probabilities, dim=0)
+    confidence_tensor, pred_idx_tensor = torch.max(probs, dim=0)
 
-    raw_label = _class_names[pred_idx_tensor.item()]
+    raw_label = idx_to_label[int(pred_idx_tensor.item())]
     confidence = float(confidence_tensor.item())
 
-    top_probs, top_indices = torch.topk(
-        probabilities,
-        k=min(3, len(_class_names)),
-    )
+    top_probs, top_indices = torch.topk(probs, k=min(5, len(idx_to_label)))
 
     top_predictions = [
         {
-            "label": _class_names[idx.item()],
+            "label": idx_to_label[int(index.item())],
             "confidence": round(float(prob.item()), 4),
         }
-        for prob, idx in zip(top_probs, top_indices)
+        for prob, index in zip(top_probs, top_indices)
     ]
 
-    if raw_label == NO_BRAND_CLASS:
-        label = "no_brand"
-        brand_label = "no_brand"
-
-    elif confidence >= CONFIDENCE_THRESHOLD:
-        label = "brand"
-        brand_label = raw_label
-
-    else:
-        label = "unknown"
-        brand_label = raw_label
+    is_known_brand = (
+        raw_label not in NON_BRAND_CLASSES
+        and confidence >= CONFIDENCE_THRESHOLD
+    )
 
     return {
-        "label": label,
-        "brand_label": brand_label,
+        "label": "brand" if is_known_brand else raw_label,
+        "brand_label": raw_label,
         "raw_label": raw_label,
         "confidence": round(confidence, 4),
-        "isReliable": label == "brand",
+        "isReliable": is_known_brand,
+        "isKnownBrand": is_known_brand,
         "threshold": CONFIDENCE_THRESHOLD,
-        "crop_source": crop_item.get("source"),
-        "crop_bbox": crop_item.get("bbox"),
-        "detector_confidence": crop_item.get("confidence", 0.0),
         "top_predictions": top_predictions,
     }
 
 
-def _select_best_result(results):
-    if not results:
-        return None
+def predict_brand_crop_classifier(logo_candidates):
+    results = []
 
-    reliable_brand = [
+    for candidate in logo_candidates or []:
+        crop = candidate.get("crop")
+
+        if crop is None:
+            continue
+
+        prediction = predict_single_crop(crop)
+
+        prediction.update({
+            "candidate_id": candidate.get("id"),
+            "crop_bbox": candidate.get("bbox"),
+            "original_bbox": candidate.get("original_bbox"),
+            "crop_source": candidate.get("source"),
+            "detector_confidence": candidate.get("emblem_score"),
+        })
+
+        results.append(prediction)
+
+    known_brand_results = [
         item for item in results
-        if item["label"] == "brand" and item["isReliable"]
+        if item.get("isKnownBrand")
     ]
 
-    if reliable_brand:
-        return max(reliable_brand, key=lambda item: item["confidence"])
-
-    non_no_brand = [
-        item for item in results
-        if item["raw_label"] != NO_BRAND_CLASS
-    ]
-
-    if non_no_brand:
-        return max(non_no_brand, key=lambda item: item["confidence"])
-
-    return max(results, key=lambda item: item["confidence"])
-
-
-def predict_brand_crop_classifier(
-    bgr,
-    logo_detections=None,
-    use_fallback=True,
-):
-    _load_model()
-
-    crops = extract_logo_crops(
-        bgr=bgr,
-        detections=logo_detections or [],
-    )
-
-    used_fallback = False
-
-    if not crops and use_fallback:
-        crops = fallback_chest_crops(bgr)
-        used_fallback = True
-
-    print(f"[DEBUG] crops found: {len(crops)}")
-    print(f"[DEBUG] used fallback: {used_fallback}")
-
-    DEBUG_CROPS_DIR = PROJECT_ROOT / "artifacts" / "debug_brand_crops"
-    DEBUG_CROPS_DIR.mkdir(parents=True, exist_ok=True)
-
-
-    for index, item in enumerate(crops):
-        cv2.imwrite(
-            str(DEBUG_CROPS_DIR / f"crop_{index}_{item.get('source', 'unknown')}.jpg"),
-            item["crop"],
+    if known_brand_results:
+        best = max(
+            known_brand_results,
+            key=lambda item: item.get("confidence", 0.0),
         )
+    elif results:
+        best = max(
+            results,
+            key=lambda item: item.get("confidence", 0.0),
+        )
+    else:
+        best = None
 
-    print(f"[DEBUG] crops found: {len(crops)}")
-    print(f"[DEBUG] used fallback: {used_fallback}")
-
-    if not crops:
+    if best is None:
         return {
             "label": "unknown",
             "brand_label": "unknown",
             "raw_label": "unknown",
             "confidence": 0.0,
             "isReliable": False,
+            "isKnownBrand": False,
             "threshold": CONFIDENCE_THRESHOLD,
             "source": "ml_brand_crop_classifier",
             "reason": "no_logo_candidate_crops",
-            "used_fallback": used_fallback,
             "crop_results": [],
         }
-
-    crop_results = [
-        _predict_single_crop(item)
-        for item in crops
-    ]
-
-    best = _select_best_result(crop_results)
-
-    print("[DEBUG] best brand crop:", best)
 
     return {
         "label": best["label"],
@@ -212,12 +179,13 @@ def predict_brand_crop_classifier(
         "raw_label": best["raw_label"],
         "confidence": best["confidence"],
         "isReliable": best["isReliable"],
+        "isKnownBrand": best["isKnownBrand"],
         "threshold": CONFIDENCE_THRESHOLD,
         "source": "ml_brand_crop_classifier",
-        "used_fallback": used_fallback,
-        "crop_source": best["crop_source"],
-        "crop_bbox": best["crop_bbox"],
-        "detector_confidence": best["detector_confidence"],
-        "top_predictions": best["top_predictions"],
-        "crop_results": crop_results,
+        "crop_bbox": best.get("crop_bbox"),
+        "original_bbox": best.get("original_bbox"),
+        "crop_source": best.get("crop_source"),
+        "detector_confidence": best.get("detector_confidence"),
+        "top_predictions": best.get("top_predictions", []),
+        "crop_results": results,
     }
