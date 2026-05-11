@@ -1,7 +1,6 @@
 from __future__ import annotations
 
-
-APPAREL_TYPE_CONFIDENCE_THRESHOLD = 0.70
+from core.config import APPAREL_TYPE_CONFIDENCE_THRESHOLD
 
 
 def run(ctx) -> None:
@@ -42,7 +41,7 @@ def run(ctx) -> None:
         return
 
     try:
-        from ml.apparel_type.inference import predict_apparel_type
+        from ml.apparel_type.inference_apparel_type import predict_apparel_type
 
         result = predict_apparel_type(ctx.bgr)
 
@@ -50,14 +49,12 @@ def run(ctx) -> None:
         label = str(result.get("label", "unknown"))
         is_reliable = confidence >= APPAREL_TYPE_CONFIDENCE_THRESHOLD
 
-        enriched_result = {
+        ctx.ml["apparel_type"] = {
             **result,
             "isReliable": is_reliable,
             "threshold": APPAREL_TYPE_CONFIDENCE_THRESHOLD,
             "source": "ml",
         }
-
-        ctx.ml["apparel_type"] = enriched_result
 
         ctx.scene["apparel_type"] = label
         ctx.scene["apparel_type_confidence"] = round(confidence, 4)
@@ -77,6 +74,7 @@ def run(ctx) -> None:
             "label": "unknown",
             "confidence": None,
             "isReliable": False,
+            "threshold": APPAREL_TYPE_CONFIDENCE_THRESHOLD,
             "source": "unavailable",
             "error": str(exc),
         }

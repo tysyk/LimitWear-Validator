@@ -6,6 +6,11 @@ import torch
 from PIL import Image
 from torchvision import transforms
 
+from core.brand_keywords import KNOWN_BRAND_CLASSES, NON_BRAND_CLASSES
+from core.config import (
+    BRAND_CONFIDENCE_THRESHOLD,
+    BRAND_SUSPECTED_THRESHOLD,
+)
 from ml.common.models.mobilenet_v3_classifier import (
     build_mobilenet_v3_classifier,
 )
@@ -18,9 +23,6 @@ MODEL_PATH = WEIGHTS_DIR / "best.pt"
 LABELS_PATH = WEIGHTS_DIR / "labels.json"
 
 IMG_SIZE = 224
-CONFIDENCE_THRESHOLD = 0.75
-
-NON_BRAND_CLASSES = {"no_brand", "unknown_logo"}
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -79,6 +81,23 @@ def _preprocess_bgr(crop):
     return transform(image).unsqueeze(0)
 
 
+def _find_suspected_known_brand(top_predictions):
+    for item in top_predictions:
+        label = str(item.get("label", "")).lower()
+        confidence = float(item.get("confidence", 0.0) or 0.0)
+
+        if (
+            label in KNOWN_BRAND_CLASSES
+            and confidence >= BRAND_SUSPECTED_THRESHOLD
+        ):
+            return {
+                "label": label,
+                "confidence": confidence,
+            }
+
+    return None
+
+
 def predict_single_crop(crop):
     model, idx_to_label = _load_model()
 
@@ -93,7 +112,10 @@ def predict_single_crop(crop):
     raw_label = idx_to_label[int(pred_idx_tensor.item())]
     confidence = float(confidence_tensor.item())
 
-    top_probs, top_indices = torch.topk(probs, k=min(5, len(idx_to_label)))
+    top_probs, top_indices = torch.topk(
+        probs,
+        k=min(5, len(idx_to_label)),
+    )
 
     top_predictions = [
         {
@@ -105,8 +127,10 @@ def predict_single_crop(crop):
 
     is_known_brand = (
         raw_label not in NON_BRAND_CLASSES
-        and confidence >= CONFIDENCE_THRESHOLD
+        and confidence >= BRAND_CONFIDENCE_THRESHOLD
     )
+
+    suspected_known_brand = _find_suspected_known_brand(top_predictions)
 
     return {
         "label": "brand" if is_known_brand else raw_label,
@@ -115,8 +139,16 @@ def predict_single_crop(crop):
         "confidence": round(confidence, 4),
         "isReliable": is_known_brand,
         "isKnownBrand": is_known_brand,
-        "threshold": CONFIDENCE_THRESHOLD,
+        "threshold": BRAND_CONFIDENCE_THRESHOLD,
         "top_predictions": top_predictions,
+        "suspectedKnownBrand": suspected_known_brand is not None,
+        "suspectedBrandLabel": (
+            suspected_known_brand["label"] if suspected_known_brand else None
+        ),
+        "suspectedBrandConfidence": (
+            suspected_known_brand["confidence"] if suspected_known_brand else 0.0
+        ),
+        "suspectedBrandThreshold": BRAND_SUSPECTED_THRESHOLD,
     }
 
 
@@ -146,10 +178,20 @@ def predict_brand_crop_classifier(logo_candidates):
         if item.get("isKnownBrand")
     ]
 
+    suspected_brand_results = [
+        item for item in results
+        if item.get("suspectedKnownBrand")
+    ]
+
     if known_brand_results:
         best = max(
             known_brand_results,
             key=lambda item: item.get("confidence", 0.0),
+        )
+    elif suspected_brand_results:
+        best = max(
+            suspected_brand_results,
+            key=lambda item: item.get("suspectedBrandConfidence", 0.0),
         )
     elif results:
         best = max(
@@ -167,7 +209,11 @@ def predict_brand_crop_classifier(logo_candidates):
             "confidence": 0.0,
             "isReliable": False,
             "isKnownBrand": False,
-            "threshold": CONFIDENCE_THRESHOLD,
+            "threshold": BRAND_CONFIDENCE_THRESHOLD,
+            "suspectedKnownBrand": False,
+            "suspectedBrandLabel": None,
+            "suspectedBrandConfidence": 0.0,
+            "suspectedBrandThreshold": BRAND_SUSPECTED_THRESHOLD,
             "source": "ml_brand_crop_classifier",
             "reason": "no_logo_candidate_crops",
             "crop_results": [],
@@ -180,7 +226,14 @@ def predict_brand_crop_classifier(logo_candidates):
         "confidence": best["confidence"],
         "isReliable": best["isReliable"],
         "isKnownBrand": best["isKnownBrand"],
-        "threshold": CONFIDENCE_THRESHOLD,
+        "threshold": BRAND_CONFIDENCE_THRESHOLD,
+        "suspectedKnownBrand": best.get("suspectedKnownBrand", False),
+        "suspectedBrandLabel": best.get("suspectedBrandLabel"),
+        "suspectedBrandConfidence": best.get("suspectedBrandConfidence", 0.0),
+        "suspectedBrandThreshold": best.get(
+            "suspectedBrandThreshold",
+            BRAND_SUSPECTED_THRESHOLD,
+        ),
         "source": "ml_brand_crop_classifier",
         "crop_bbox": best.get("crop_bbox"),
         "original_bbox": best.get("original_bbox"),

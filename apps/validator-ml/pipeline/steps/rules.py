@@ -9,19 +9,33 @@ from core.config import (
     WATERMARK_STRONG_AREA_RATIO,
     WATERMARK_STRONG_SCORE,
 )
+from core.messages import get_rule_message
+
+
+NON_BRAND_LABELS = {
+    "",
+    "unknown",
+    "no_brand",
+    "unknown_logo",
+    "none",
+}
 
 
 def _estimate_words(ocr_items: List[Dict[str, Any]]) -> int:
     total = 0
+
     for item in ocr_items:
         text = str(item.get("text") or item.get("value") or "").strip()
+
         if text:
-            total += len([w for w in text.split() if w.strip()])
+            total += len([word for word in text.split() if word.strip()])
+
     return total
 
 
 def _watermark_metrics(mark: Dict[str, Any]) -> tuple[float, float, float]:
     meta = mark.get("meta", {}) or {}
+
     return (
         float(mark.get("score", 0.0) or 0.0),
         float(meta.get("areaRatio", 0.0) or 0.0),
@@ -31,116 +45,105 @@ def _watermark_metrics(mark: Dict[str, Any]) -> tuple[float, float, float]:
 
 def _has_watermark_text_evidence(ocr_items: List[Dict[str, Any]]) -> bool:
     terms = ("watermark", "stock", "preview", "sample")
+
     for item in ocr_items:
         text = str(item.get("text") or item.get("value") or "").lower()
+
         if any(term in text for term in terms):
             return True
+
     return False
 
 
-def _get_known_brand_signal(ctx, detections: Dict[str, Any]) -> Dict[str, Any]:
-    ml = ctx.ml or {}
-    moderation = ctx.moderation or {}
+def _get_brand_signal(ctx) -> Dict[str, Any]:
+    brand_model = (ctx.ml or {}).get("brand_crop_classifier") or {}
 
-    brand_crop_classifier = ml.get("brand_crop_classifier") or {}
+    raw_label = str(
+        brand_model.get("raw_label")
+        or brand_model.get("brand_label")
+        or brand_model.get("label")
+        or "unknown"
+    ).lower()
 
-    if brand_crop_classifier:
-        label = str(
-            brand_crop_classifier.get("label", "unknown")
-        ).lower()
+    brand_label = str(
+        brand_model.get("brand_label")
+        or raw_label
+    ).lower()
 
-        brand_label = str(
-            brand_crop_classifier.get("brand_label")
-            or brand_crop_classifier.get("raw_label")
-            or label
-        ).lower()
+    confidence = float(brand_model.get("confidence", 0.0) or 0.0)
+    is_known_brand = bool(brand_model.get("isKnownBrand", False))
+    is_reliable = bool(brand_model.get("isReliable", False))
 
-        confidence = float(
-            brand_crop_classifier.get("confidence", 0.0) or 0.0
-        )
-
-        reliable = bool(
-            brand_crop_classifier.get("isReliable", False)
-        )
-
-        if (
-            label == "brand"
-            and reliable
-            and confidence >= 0.95
-        ):
-            return {
-                "detected": True,
-                "source": "brand_crop_classifier",
-                "label": brand_label,
-                "confidence": confidence,
-                "evidence": [brand_label],
-            }
-
-    brand_classifier = (
-        ml.get("brand_classifier")
-        or ml.get("brand_detection")
-        or {}
+    suspected_known_brand = bool(
+        brand_model.get("suspectedKnownBrand", False)
     )
 
-    if brand_classifier:
-        label = str(
-            brand_classifier.get("label", "unknown")
-        ).lower()
+    suspected_brand_label = str(
+        brand_model.get("suspectedBrandLabel") or ""
+    ).lower()
 
-        confidence = float(
-            brand_classifier.get("confidence", 0.0) or 0.0
-        )
+    suspected_brand_confidence = float(
+        brand_model.get("suspectedBrandConfidence", 0.0) or 0.0
+    )
 
-        reliable = bool(
-            brand_classifier.get("isReliable", False)
-        )
-
-        known_brand = label not in {
-            "",
-            "unknown",
-            "other_logo",
-            "no_brand",
-            "none",
-        }
-
-        if (
-            label == "brand"
-            and reliable
-            and confidence >= 0.95
-            and brand_crop_classifier.get("used_fallback") is False
-        ):
-            return {
-                "detected": True,
-                "source": "brand_classifier",
-                "label": label,
-                "confidence": confidence,
-                "evidence": [label],
-            }
-
-    brand_text_hits: List[str] = []
-
-    for label in moderation.get("labels", []) or []:
-        if label.get("label") == "brand_text_detected":
-            brand_text_hits.extend(
-                label.get("evidence", []) or []
-            )
-
-    if brand_text_hits:
+    if (
+        is_known_brand
+        and is_reliable
+        and brand_label not in NON_BRAND_LABELS
+    ):
         return {
             "detected": True,
-            "source": "ocr_brand_text",
-            "label": "brand_text",
-            "confidence": 0.80,
-            "evidence": sorted(set(brand_text_hits)),
+            "source": "brand_crop_classifier",
+            "label": brand_label,
+            "confidence": confidence,
+            "bbox": brand_model.get("crop_bbox"),
+            "original_bbox": brand_model.get("original_bbox"),
+            "topPredictions": brand_model.get("top_predictions", []),
+            "evidence": [brand_label],
+            "suspected": False,
+        }
+
+    if (
+        suspected_known_brand
+        and suspected_brand_label
+        and suspected_brand_label not in NON_BRAND_LABELS
+    ):
+        return {
+            "detected": True,
+            "source": "brand_crop_classifier_suspected",
+            "label": suspected_brand_label,
+            "confidence": suspected_brand_confidence,
+            "bbox": brand_model.get("crop_bbox"),
+            "original_bbox": brand_model.get("original_bbox"),
+            "topPredictions": brand_model.get("top_predictions", []),
+            "evidence": [suspected_brand_label],
+            "suspected": True,
         }
 
     return {
         "detected": False,
-        "source": None,
-        "label": None,
-        "confidence": 0.0,
+        "source": "brand_crop_classifier",
+        "label": brand_label,
+        "confidence": confidence,
+        "bbox": brand_model.get("crop_bbox"),
+        "original_bbox": brand_model.get("original_bbox"),
+        "topPredictions": brand_model.get("top_predictions", []),
         "evidence": [],
+        "suspected": False,
     }
+
+
+def _get_ocr_brand_hits(moderation: Dict[str, Any]) -> List[str]:
+    brand_hits: List[str] = []
+
+    text_signals = moderation.get("textSignals", {}) or {}
+    brand_hits.extend(text_signals.get("brandHits", []) or [])
+
+    for label in moderation.get("labels", []) or []:
+        if label.get("label") == "brand_text_detected":
+            brand_hits.extend(label.get("evidence", []) or [])
+
+    return sorted(set(str(item).lower() for item in brand_hits if item))
 
 
 def run(ctx) -> None:
@@ -154,22 +157,44 @@ def run(ctx) -> None:
     qr_marks = detections.get("qrMarks", []) or []
     watermark_marks = detections.get("watermarkMarks", []) or []
     visual_logo_marks = detections.get("visualLogoMarks", []) or []
+    logo_candidates = detections.get("logoCandidates", []) or []
     ip = detections.get("ip") or {}
 
-    apparel_ml = ml.get("apparel", {})
-    logo_presence = ml.get("logo_presence", {})
-    old_brand_risk = detections.get("ml_brand_risk") or ml.get("brand_risk") or {}
-    adult_safety = detections.get("adultSafety") or detections.get("ml_adult_safety") or ml.get("adult_safety") or {}
+    adult_safety = (
+        detections.get("adultSafety")
+        or detections.get("ml_adult_safety")
+        or ml.get("adult_safety")
+        or {}
+    )
+
+    apparel_ml = ml.get("apparel", {}) or {}
 
     scene_type = scene.get("type")
     is_apparel = bool(scene.get("is_apparel", True))
-    apparel_confidence = float(scene.get("apparel_confidence", apparel_ml.get("confidence", 0.0)) or 0.0)
+    apparel_confidence = float(
+        scene.get("apparel_confidence", apparel_ml.get("confidence", 0.0))
+        or 0.0
+    )
     apparel_source = scene.get("apparel_source", "unknown")
 
     word_count = _estimate_words(ocr_items)
     text_blocks = len(ocr_items)
 
-    brand_signal = _get_known_brand_signal(ctx, detections)
+    brand_signal = _get_brand_signal(ctx)
+    ocr_brand_hits = _get_ocr_brand_hits(moderation)
+
+    if ocr_brand_hits and not brand_signal.get("detected"):
+        brand_signal = {
+            "detected": True,
+            "source": "ocr_brand_text",
+            "label": "brand_text",
+            "confidence": 0.80,
+            "bbox": None,
+            "original_bbox": None,
+            "topPredictions": [],
+            "evidence": ocr_brand_hits,
+            "suspected": True,
+        }
 
     ctx.debug["rulesInput"] = {
         "sceneType": scene_type,
@@ -182,6 +207,7 @@ def run(ctx) -> None:
         "qrCount": len(qr_marks),
         "watermarkCount": len(watermark_marks),
         "visualLogoCount": len(visual_logo_marks),
+        "logoCandidateCount": len(logo_candidates),
         "brandSignal": brand_signal,
     }
 
@@ -189,12 +215,124 @@ def run(ctx) -> None:
         "rules",
         {
             "policy": "creative_apparel_marketplace",
-            "principle": "creative complexity is allowed; known brands and unsafe content require review or blocking",
+            "principle": (
+                "creative complexity is allowed; known brands and unsafe content "
+                "require review or blocking"
+            ),
             "inputs": ctx.debug["rulesInput"],
         },
     )
 
-    # 1. Text amount is NOT a problem by itself.
+    if brand_signal.get("detected"):
+        message = get_rule_message("KNOWN_BRAND_REVIEW")
+
+        ctx.add_rule_result(
+            rule_id="KNOWN_BRAND_REVIEW",
+            passed=False,
+            severity="medium",
+            penalty=10,
+            title=message["title"],
+            message=message["message"],
+            bbox=brand_signal.get("bbox"),
+            meta={
+                "blocking": False,
+                "needsReview": True,
+                "riskType": "known_brand",
+                **brand_signal,
+            },
+        )
+
+    for hit in ip.get("exactHits", []) or []:
+        hit_type = str(hit.get("type", "ip")).lower()
+
+        if hit_type == "brand":
+            message = get_rule_message("IP_BRAND_REVIEW")
+
+            ctx.add_rule_result(
+                rule_id="IP_BRAND_REVIEW",
+                passed=False,
+                severity="medium",
+                penalty=10,
+                title=message["title"],
+                message=message["message"],
+                bbox=hit.get("bbox"),
+                meta={
+                    **hit,
+                    "blocking": False,
+                    "needsReview": True,
+                    "riskType": "brand_review",
+                },
+            )
+        else:
+            message = get_rule_message("IP_CONFIRMED")
+
+            ctx.add_rule_result(
+                rule_id=f"IP_{hit_type.upper()}_EXACT",
+                passed=False,
+                severity="high",
+                penalty=50,
+                title=message["title"],
+                message=message["message"],
+                bbox=hit.get("bbox"),
+                meta={
+                    **hit,
+                    "blocking": True,
+                    "needsReview": False,
+                    "riskType": "confirmed_ip",
+                },
+            )
+
+    for hit in ip.get("suspiciousHits", []) or []:
+        message = get_rule_message("IP_SUSPECT")
+
+        ctx.add_rule_result(
+            rule_id="IP_SUSPECT",
+            passed=False,
+            severity="medium",
+            penalty=10,
+            title=message["title"],
+            message=message["message"],
+            bbox=hit.get("bbox"),
+            meta={
+                **hit,
+                "blocking": False,
+                "needsReview": True,
+                "riskType": "suspected_ip",
+            },
+        )
+
+    if not ip.get("exactHits") and not ip.get("suspiciousHits"):
+        ctx.add_rule_result(
+            rule_id="IP_RISK_CLEAR",
+            passed=True,
+            severity="low",
+            penalty=0,
+            title="IP-ризиків не знайдено",
+            message="Підтверджених IP-збігів не виявлено.",
+            meta={
+                "blocking": False,
+                "needsReview": False,
+            },
+        )
+
+    ctx.add_rule_result(
+        rule_id="VISUAL_LOGO_HELPER_SIGNAL",
+        passed=True,
+        severity="low",
+        penalty=0,
+        title="Візуальний logo-like сигнал",
+        message=(
+            "Візуальні емблеми використовуються як допоміжний сигнал "
+            "і не блокують дизайн без підтвердження від brand classifier або OCR."
+        ),
+        meta={
+            "visualLogoCount": len(visual_logo_marks),
+            "logoCandidateCount": len(logo_candidates),
+            "blocking": False,
+            "needsReview": False,
+        },
+    )
+
     ctx.add_rule_result(
         rule_id="TEXT_AMOUNT_ALLOWED",
         passed=True,
@@ -210,7 +348,6 @@ def run(ctx) -> None:
         },
     )
 
-    # 2. Complex lines are allowed for apparel designs.
     ctx.add_rule_result(
         rule_id="COMPLEX_PRINT_ALLOWED",
         passed=True,
@@ -225,157 +362,22 @@ def run(ctx) -> None:
         },
     )
 
-    # 3. Exact IP hits.
-    # Brand text does NOT auto-fail. It goes to manual review.
-    # Characters/franchises still block because they are stronger IP risks.
-    for hit in ip.get("exactHits", []) or []:
-        hit_type = str(hit.get("type", "ip")).lower()
+    decoded_qr = [
+        item for item in qr_marks
+        if str(item.get("decodedText", "")).strip()
+    ]
 
-        if hit_type == "brand":
-            ctx.add_rule_result(
-                rule_id="IP_BRAND_REVIEW",
-                passed=False,
-                severity="medium",
-                penalty=10,
-                title="Виявлено бренд",
-                message=f"Знайдено бренд: {hit.get('keyword')}. Потрібна ручна перевірка прав.",
-                bbox=hit.get("bbox"),
-                meta={
-                    **hit,
-                    "blocking": False,
-                    "needsReview": True,
-                    "riskType": "brand_review",
-                },
-            )
-        else:
-            ctx.add_rule_result(
-                rule_id=f"IP_{hit_type.upper()}_EXACT",
-                passed=False,
-                severity="high",
-                penalty=50,
-                title="Підтверджений IP-ризик",
-                message=f"Знайдено підтверджений збіг: {hit.get('keyword')}",
-                bbox=hit.get("bbox"),
-                meta={
-                    **hit,
-                    "blocking": True,
-                    "needsReview": False,
-                    "riskType": "confirmed_ip",
-                },
-            )
-
-    # 4. Suspicious IP goes to manual review.
-    for hit in ip.get("suspiciousHits", []) or []:
-        ctx.add_rule_result(
-            rule_id="IP_SUSPECT",
-            passed=False,
-            severity="medium",
-            penalty=10,
-            title="Підозра на захищений контент",
-            message=f"Підозрілий збіг: {hit.get('keyword')} (score={hit.get('score')})",
-            bbox=hit.get("bbox"),
-            meta={**hit, "blocking": False, "needsReview": True, "riskType": "suspected_ip"},
-        )
-
-    if not ip.get("exactHits") and not ip.get("suspiciousHits"):
-        ctx.add_rule_result(
-            rule_id="IP_RISK_CLEAR",
-            passed=True,
-            severity="low",
-            penalty=0,
-            title="IP-ризиків не знайдено",
-            message="Підтверджених IP-збігів не виявлено.",
-            meta={"blocking": False, "needsReview": False},
-        )
-
-    # 5. Known brand policy.
-    # Known brand does not auto-fail, because business may ask for rights/license.
-    if brand_signal.get("detected"):
-        ctx.add_rule_result(
-            rule_id="KNOWN_BRAND_REVIEW",
-            passed=False,
-            severity="medium",
-            penalty=10,
-            title="Виявлено відомий бренд",
-            message="Виявлено бренд або брендоподібний сигнал. Потрібна ручна перевірка прав на використання.",
-            meta={
-                "blocking": False,
-                "needsReview": True,
-                "riskType": "known_brand",
-                **brand_signal,
-            },
-        )
-
-    # 6. Old brand_risk stays weak until replaced by real known-brand classifier.
-    if old_brand_risk and not old_brand_risk.get("skipped"):
-        label = str(old_brand_risk.get("label", "")).lower()
-        confidence = float(old_brand_risk.get("confidence", 0.0) or 0.0)
-        reliable = bool(old_brand_risk.get("isReliable", False))
-
-        logo_confidence = float(logo_presence.get("confidence", 0.0) or 0.0)
-        logo_reliable = bool(logo_presence.get("isReliable", False))
-
-        strong_unknown_logo = (
-            label == "brand_logo"
-            and reliable
-            and confidence >= 0.97
-            and logo_reliable
-            and logo_confidence >= 0.95
-            and not brand_signal.get("detected")
-        )
-
-        ctx.add_rule_result(
-            rule_id="UNKNOWN_LOGO_SIGNAL",
-            passed=not strong_unknown_logo,
-            severity="low",
-            penalty=2 if strong_unknown_logo else 0,
-            title="Невідомий logo-like сигнал",
-            message=(
-                "ML бачить сильний logo-like сигнал, але конкретний бренд не підтверджено."
-                if strong_unknown_logo
-                else "Сильного невідомого logo-like ризику не виявлено."
-            ),
-            meta={
-                "blocking": False,
-                "needsReview": False,
-                "riskType": "unknown_logo_signal",
-                "label": label,
-                "confidence": confidence,
-                "isReliable": reliable,
-                "logoConfidence": logo_confidence,
-                "logoReliable": logo_reliable,
-                "source": "old_ml_brand_risk",
-            },
-        )
-
-    # 7. Visual logo detector is helper/debug only.
-    ctx.add_rule_result(
-        rule_id="VISUAL_LOGO_HELPER_SIGNAL",
-        passed=True,
-        severity="low",
-        penalty=0,
-        title="Візуальний logo-like сигнал",
-        message="Візуальні емблеми використовуються як допоміжний сигнал, але не блокують дизайн без brand evidence.",
-        meta={
-            "count": len(visual_logo_marks),
-            "blocking": False,
-            "needsReview": False,
-        },
+    qr_message = get_rule_message(
+        "QR_CODE_REVIEW" if decoded_qr else "QR_CODE_CLEAR"
     )
 
-    # 8. QR with decoded content goes to review. Fake QR-like shapes do not matter.
-    decoded_qr = [q for q in qr_marks if str(q.get("decodedText", "")).strip()]
     ctx.add_rule_result(
         rule_id="QR_CODE_DECODED",
         passed=not decoded_qr,
         severity="medium" if decoded_qr else "low",
         penalty=8 if decoded_qr else 0,
-        title="QR-код",
-        message=(
-            "На зображенні є QR-код із decoded content. Потрібна ручна перевірка."
-            if decoded_qr
-            else "QR-кодів із decoded content не виявлено."
-        ),
+        title=qr_message["title"],
+        message=qr_message["message"],
         meta={
             "qrCount": len(qr_marks),
             "decodedQrCount": len(decoded_qr),
@@ -384,7 +386,6 @@ def run(ctx) -> None:
         },
     )
 
-    # 9. Adult/NSFW ML.
     if adult_safety:
         label = str(adult_safety.get("label", "")).lower()
         adult_score = float(adult_safety.get("adultScore", 0.0) or 0.0)
@@ -395,23 +396,33 @@ def run(ctx) -> None:
         review = (
             not blocking
             and (
-                label in {"adult_risk", "nsfw", "sexual", "explicit", "anime_sexualized", "ecchi"}
+                label in {
+                    "adult_risk",
+                    "nsfw",
+                    "sexual",
+                    "explicit",
+                    "anime_sexualized",
+                    "ecchi",
+                }
                 or adult_score >= 0.55
             )
         )
 
         if blocking or review:
+            message_key = (
+                "ADULT_VISUAL_RISK_BLOCK"
+                if blocking
+                else "ADULT_VISUAL_RISK_REVIEW"
+            )
+            message = get_rule_message(message_key)
+
             ctx.add_rule_result(
                 rule_id="ADULT_VISUAL_RISK",
                 passed=False,
                 severity="high" if blocking else "medium",
                 penalty=45 if blocking else 15,
-                title="Adult/NSFW ризик",
-                message=(
-                    f"ML виявив блокуючий adult/NSFW ризик (score={adult_score:.2f})."
-                    if blocking
-                    else f"ML виявив можливий adult/NSFW ризик (score={adult_score:.2f})."
-                ),
+                title=message["title"],
+                message=message["message"],
                 meta={
                     "blocking": blocking,
                     "needsReview": review,
@@ -424,7 +435,6 @@ def run(ctx) -> None:
                 },
             )
 
-    # 10. Watermark policy.
     watermark_text_evidence = _has_watermark_text_evidence(ocr_items)
     strong_watermarks = []
     blocking_watermarks = []
@@ -432,7 +442,10 @@ def run(ctx) -> None:
     for mark in watermark_marks:
         score, area_ratio, centeredness = _watermark_metrics(mark)
 
-        if score >= WATERMARK_STRONG_SCORE and area_ratio >= WATERMARK_STRONG_AREA_RATIO:
+        if (
+            score >= WATERMARK_STRONG_SCORE
+            and area_ratio >= WATERMARK_STRONG_AREA_RATIO
+        ):
             strong_watermarks.append(mark)
 
         if (
@@ -446,21 +459,20 @@ def run(ctx) -> None:
     watermark_blocking = bool(blocking_watermarks)
     watermark_review = bool(strong_watermarks) and not watermark_blocking
 
+    if watermark_blocking:
+        watermark_message = get_rule_message("WATERMARK_RISK_BLOCK")
+    elif watermark_review:
+        watermark_message = get_rule_message("WATERMARK_RISK_REVIEW")
+    else:
+        watermark_message = get_rule_message("WATERMARK_RISK_CLEAR")
+
     ctx.add_rule_result(
         rule_id="WATERMARK_RISK",
         passed=not watermark_blocking and not watermark_review,
         severity="high" if watermark_blocking else ("medium" if watermark_review else "low"),
         penalty=30 if watermark_blocking else (8 if watermark_review else 0),
-        title="Підозра на водяний знак",
-        message=(
-            "Виявлено сильні ознаки водяного знака з текстовим підтвердженням."
-            if watermark_blocking
-            else (
-                "Виявлено watermark-like область. Потрібна ручна перевірка."
-                if watermark_review
-                else "Водяних знаків не виявлено."
-            )
-        ),
+        title=watermark_message["title"],
+        message=watermark_message["message"],
         meta={
             "watermarkCount": len(watermark_marks),
             "strongWatermarkCount": len(strong_watermarks),
@@ -471,29 +483,28 @@ def run(ctx) -> None:
         },
     )
 
-    # 11. Non-apparel policy.
     non_apparel_blocking = (
         not is_apparel
         and apparel_source == "ml"
         and apparel_confidence >= NON_APPAREL_BLOCK_CONFIDENCE
     )
+
     non_apparel_review = not is_apparel and not non_apparel_blocking
+
+    if non_apparel_blocking:
+        non_apparel_message = get_rule_message("NON_APPAREL_BLOCK")
+    elif non_apparel_review:
+        non_apparel_message = get_rule_message("NON_APPAREL_REVIEW")
+    else:
+        non_apparel_message = get_rule_message("NON_APPAREL_CLEAR")
 
     ctx.add_rule_result(
         rule_id="NON_APPAREL",
         passed=is_apparel,
         severity="high" if non_apparel_blocking else ("medium" if non_apparel_review else "low"),
         penalty=25 if non_apparel_blocking else (4 if non_apparel_review else 0),
-        title="Не схоже на дизайн одягу",
-        message=(
-            "ML з високою впевненістю визначив, що зображення не є apparel-дизайном."
-            if non_apparel_blocking
-            else (
-                "Зображення може бути non-apparel, потрібна ручна перевірка."
-                if non_apparel_review
-                else "Зображення виглядає як дизайн одягу."
-            )
-        ),
+        title=non_apparel_message["title"],
+        message=non_apparel_message["message"],
         meta={
             "blocking": non_apparel_blocking,
             "needsReview": non_apparel_review,

@@ -4,28 +4,13 @@ import re
 from difflib import SequenceMatcher
 from typing import Any, Dict, List
 
+from core.brand_keywords import OCR_BRAND_KEYWORDS
+from core.ip_keywords import (
+    CHARACTER_KEYWORDS,
+    FRANCHISE_KEYWORDS,
+    SLOGAN_KEYWORDS,
+)
 
-BRAND_KEYWORDS = [
-    "nike", "adidas", "puma", "gucci", "prada", "balenciaga",
-    "louis vuitton", "lv", "supreme", "chanel", "dior", "versace",
-    "off-white", "new balance", "under armour", "reebok", "fila",
-]
-
-CHARACTER_KEYWORDS = [
-    "mickey", "minnie", "spiderman", "spider-man", "batman", "superman",
-    "naruto", "luffy", "goku", "pikachu", "pokemon", "hello kitty",
-    "barbie", "elsa", "iron man", "captain america", "deadpool",
-]
-
-FRANCHISE_KEYWORDS = [
-    "marvel", "dc", "disney", "pixar", "star wars", "harry potter",
-    "pokemon", "dragon ball", "naruto", "one piece", "minecraft",
-    "fortnite", "league of legends", "playstation", "xbox",
-]
-
-SLOGAN_KEYWORDS = [
-    "just do it", "i'm lovin' it", "im lovin it", "think different",
-]
 
 REPLACEMENTS = {
     "0": "o",
@@ -41,37 +26,65 @@ REPLACEMENTS = {
 
 def _normalize_text(text: str) -> str:
     text = text.lower().strip()
-    for a, b in REPLACEMENTS.items():
-        text = text.replace(a, b)
+
+    for old, new in REPLACEMENTS.items():
+        text = text.replace(old, new)
+
     text = re.sub(r"[^a-z0-9\s\-]+", " ", text)
     text = re.sub(r"\s+", " ", text)
-    return text
+
+    return text.strip()
 
 
 def _collect_ocr_texts(ocr_items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    out: List[Dict[str, Any]] = []
+    entries: List[Dict[str, Any]] = []
+
     for item in ocr_items or []:
-        raw = str(item.get("text") or item.get("value") or "").strip()
-        if not raw:
+        raw_text = str(item.get("text") or item.get("value") or "").strip()
+
+        if not raw_text:
             continue
-        out.append(
+
+        entries.append(
             {
-                "text": raw,
-                "normalized": _normalize_text(raw),
+                "text": raw_text,
+                "normalized": _normalize_text(raw_text),
                 "bbox": item.get("bbox"),
                 "confidence": item.get("confidence"),
             }
         )
-    return out
+
+    return entries
 
 
 def _similarity(a: str, b: str) -> float:
     return SequenceMatcher(None, a, b).ratio()
 
 
+def _deduplicate_hits(hits: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    unique: List[Dict[str, Any]] = []
+    seen = set()
+
+    for hit in hits:
+        key = (
+            hit.get("type"),
+            hit.get("keyword"),
+            hit.get("matchedText"),
+            hit.get("matchKind"),
+        )
+
+        if key in seen:
+            continue
+
+        seen.add(key)
+        unique.append(hit)
+
+    return unique
+
+
 def _match_keywords(
     entries: List[Dict[str, Any]],
-    keywords: List[str],
+    keywords,
     label: str,
     exact_threshold: float = 0.98,
     fuzzy_threshold: float = 0.86,
@@ -81,10 +94,16 @@ def _match_keywords(
     for entry in entries:
         text = entry["normalized"]
 
-        for keyword in keywords:
-            kw = _normalize_text(keyword)
+        if not text:
+            continue
 
-            if kw in text:
+        for keyword in keywords:
+            normalized_keyword = _normalize_text(str(keyword))
+
+            if not normalized_keyword:
+                continue
+
+            if normalized_keyword in text:
                 hits.append(
                     {
                         "type": label,
@@ -97,7 +116,8 @@ def _match_keywords(
                 )
                 continue
 
-            score = _similarity(text, kw)
+            score = _similarity(text, normalized_keyword)
+
             if score >= exact_threshold:
                 hits.append(
                     {
@@ -109,6 +129,7 @@ def _match_keywords(
                         "score": round(score, 4),
                     }
                 )
+
             elif score >= fuzzy_threshold:
                 hits.append(
                     {
@@ -121,14 +142,7 @@ def _match_keywords(
                     }
                 )
 
-    unique: List[Dict[str, Any]] = []
-    seen = set()
-    for hit in hits:
-        key = (hit["type"], hit["keyword"], hit["matchedText"], hit["matchKind"])
-        if key not in seen:
-            seen.add(key)
-            unique.append(hit)
-    return unique
+    return _deduplicate_hits(hits)
 
 
 def analyze_ip_risk(
@@ -138,31 +152,40 @@ def analyze_ip_risk(
     ocr_items = detections.get("ocr") or []
     texts = _collect_ocr_texts(ocr_items)
 
-    brand_hits = _match_keywords(texts, BRAND_KEYWORDS, "brand")
+    brand_hits = _match_keywords(texts, OCR_BRAND_KEYWORDS, "brand")
     character_hits = _match_keywords(texts, CHARACTER_KEYWORDS, "character")
     franchise_hits = _match_keywords(texts, FRANCHISE_KEYWORDS, "franchise")
     slogan_hits = _match_keywords(texts, SLOGAN_KEYWORDS, "slogan")
 
-    all_hits = brand_hits + character_hits + franchise_hits + slogan_hits
+    all_hits = (
+        brand_hits
+        + character_hits
+        + franchise_hits
+        + slogan_hits
+    )
 
     exact_hits = [
-        h for h in all_hits
-        if h["matchKind"] in {"exact_substring", "exact_fuzzy"}
+        hit
+        for hit in all_hits
+        if hit.get("matchKind") in {"exact_substring", "exact_fuzzy"}
     ]
-    
+
     suspicious_hits = [
-        h for h in all_hits
-        if h["matchKind"] == "suspicious_fuzzy"
+        hit
+        for hit in all_hits
+        if hit.get("matchKind") == "suspicious_fuzzy"
     ]
 
     blocking_exact_hits = [
-        h for h in exact_hits
-        if h["type"] in {"character", "franchise"}
+        hit
+        for hit in exact_hits
+        if hit.get("type") in {"character", "franchise"}
     ]
 
     review_hits = [
-        h for h in exact_hits + suspicious_hits
-        if h["type"] in {"brand", "slogan"}
+        hit
+        for hit in exact_hits + suspicious_hits
+        if hit.get("type") in {"brand", "slogan"}
     ]
 
     blocked = len(blocking_exact_hits) > 0

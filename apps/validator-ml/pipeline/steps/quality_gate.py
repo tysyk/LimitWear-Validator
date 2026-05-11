@@ -8,10 +8,6 @@ from core.config import (
     QUALITY_MIN_WIDTH,
 )
 
-MIN_WIDTH = QUALITY_MIN_WIDTH
-MIN_HEIGHT = QUALITY_MIN_HEIGHT
-MIN_LAPLACIAN_VARIANCE = QUALITY_MIN_LAPLACIAN_VARIANCE
-
 
 def run(ctx) -> None:
     image = ctx.bgr
@@ -20,31 +16,38 @@ def run(ctx) -> None:
         ctx.fail("quality_gate", "Input image is empty")
         return
 
-    h, w = image.shape[:2]
+    height, width = image.shape[:2]
 
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
     blur_score = float(cv2.Laplacian(gray, cv2.CV_64F).var())
 
-    passed_resolution = w >= MIN_WIDTH and h >= MIN_HEIGHT
-    passed_blur = blur_score >= MIN_LAPLACIAN_VARIANCE
+    passed_resolution = (
+        width >= QUALITY_MIN_WIDTH
+        and height >= QUALITY_MIN_HEIGHT
+    )
+
+    passed_blur = blur_score >= QUALITY_MIN_LAPLACIAN_VARIANCE
 
     quality_score = 1.0
+
     if not passed_resolution:
         quality_score -= 0.4
+
     if not passed_blur:
         quality_score -= 0.3
+
     quality_score = max(0.0, min(1.0, quality_score))
 
     ctx.quality = {
-        "width": w,
-        "height": h,
+        "width": width,
+        "height": height,
         "passed_resolution": passed_resolution,
         "passed_blur": passed_blur,
         "blur_score": round(blur_score, 2),
         "quality_score": round(quality_score, 4),
-        "min_width": MIN_WIDTH,
-        "min_height": MIN_HEIGHT,
-        "min_blur_score": MIN_LAPLACIAN_VARIANCE,
+        "min_width": QUALITY_MIN_WIDTH,
+        "min_height": QUALITY_MIN_HEIGHT,
+        "min_blur_score": QUALITY_MIN_LAPLACIAN_VARIANCE,
     }
 
     ctx.set_debug_section(
@@ -66,13 +69,15 @@ def run(ctx) -> None:
         message=(
             "Роздільна здатність відповідає мінімальним вимогам."
             if passed_resolution
-            else f"Розмір зображення замалий: {w}x{h}. Мінімум {MIN_WIDTH}x{MIN_HEIGHT}."
+            else "Роздільна здатність зображення нижча за мінімальну для надійної перевірки."
         ),
         meta={
-            "width": w,
-            "height": h,
-            "minWidth": MIN_WIDTH,
-            "minHeight": MIN_HEIGHT,
+            "width": width,
+            "height": height,
+            "minWidth": QUALITY_MIN_WIDTH,
+            "minHeight": QUALITY_MIN_HEIGHT,
+            "blocking": False,
+            "needsReview": not passed_resolution,
         },
     )
 
@@ -85,11 +90,13 @@ def run(ctx) -> None:
         message=(
             "Різкість зображення достатня для автоматичної перевірки."
             if passed_blur
-            else f"Зображення занадто розмите (blur_score={blur_score:.2f})."
+            else "Зображення виглядає розмитим, тому автоматична перевірка може бути менш надійною."
         ),
         meta={
             "blurScore": round(blur_score, 2),
-            "minBlurScore": MIN_LAPLACIAN_VARIANCE,
+            "minBlurScore": QUALITY_MIN_LAPLACIAN_VARIANCE,
+            "blocking": False,
+            "needsReview": not passed_blur,
         },
     )
 
@@ -97,7 +104,9 @@ def run(ctx) -> None:
         ctx.add_warning("Image resolution is below the recommended minimum.")
 
     if not passed_blur:
-        ctx.add_warning("Image sharpness is low, so some detections may be less reliable.")
+        ctx.add_warning(
+            "Image sharpness is low, so some detections may be less reliable."
+        )
 
     ctx.bgr_used = image
     ctx.mark_step_done("quality_gate")

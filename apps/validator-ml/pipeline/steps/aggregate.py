@@ -5,9 +5,16 @@ from core.config import (
     NON_APPAREL_BLOCK_CONFIDENCE,
     QUALITY_CRITICAL_SCORE,
 )
+from core.messages import get_aggregate_reason
 
 
-def _set_need_review(ctx, reason: str, *, min_score: int = 55, max_score: int = 75) -> None:
+def _set_need_review(
+    ctx,
+    reason: str,
+    *,
+    min_score: int = 55,
+    max_score: int = 75,
+) -> None:
     ctx.score = min(max(ctx.score, min_score), max_score)
     ctx.set_verdict("NEED_REVIEW")
     ctx.debug["need_review_reason"] = reason
@@ -41,6 +48,7 @@ def run(ctx) -> None:
         meta = rule.get("meta") or {}
 
         penalties += penalty
+
         if severity == "high":
             high_count += 1
         elif severity == "medium":
@@ -50,6 +58,7 @@ def run(ctx) -> None:
 
         if meta.get("blocking"):
             blocking_failures.append(rule)
+
         if meta.get("needsReview"):
             review_failures.append(rule)
 
@@ -60,19 +69,37 @@ def run(ctx) -> None:
 
     scene_type = scene.get("type")
     is_apparel = bool(scene.get("is_apparel", True))
-    apparel_confidence = float(scene.get("apparel_confidence", apparel_ml.get("confidence", 0.0)) or 0.0)
-    apparel_source = scene.get("apparel_source", "unknown")
-    apparel_label = str(apparel_ml.get("label", scene.get("apparel_label", "unknown")))
 
-    quality_score = float(ctx.quality.get("quality_score", 1.0) or 1.0)
-    blur_ok = bool(ctx.quality.get("passed_blur", True))
-    resolution_ok = bool(ctx.quality.get("passed_resolution", True))
+    apparel_confidence = float(
+        scene.get(
+            "apparel_confidence",
+            apparel_ml.get("confidence", 0.0),
+        )
+        or 0.0
+    )
+
+    apparel_source = scene.get("apparel_source", "unknown")
+    apparel_label = str(
+        apparel_ml.get(
+            "label",
+            scene.get("apparel_label", "unknown"),
+        )
+    )
+
+    quality = ctx.quality or {}
+
+    quality_score = float(quality.get("quality_score", 1.0) or 1.0)
+    blur_ok = bool(quality.get("passed_blur", True))
+    resolution_ok = bool(quality.get("passed_resolution", True))
 
     score = 100 - penalties
+
     if not resolution_ok:
         score -= 12
+
     if not blur_ok:
         score -= 8
+
     if quality_score < 0.55:
         score -= 8
 
@@ -85,7 +112,11 @@ def run(ctx) -> None:
             or apparel_confidence < APPAREL_CONFIDENCE_THRESHOLD
         )
     )
-    unknown_scene_from_weak_ml = scene_type == "unknown" and uncertain_apparel
+
+    unknown_scene_from_weak_ml = (
+        scene_type == "unknown"
+        and uncertain_apparel
+    )
 
     ctx.set_debug_section(
         "aggregate",
@@ -94,8 +125,12 @@ def run(ctx) -> None:
             "highViolations": high_count,
             "mediumViolations": med_count,
             "lowViolations": low_count,
-            "blockingRuleIds": [rule.get("ruleId") for rule in blocking_failures],
-            "reviewRuleIds": [rule.get("ruleId") for rule in review_failures],
+            "blockingRuleIds": [
+                rule.get("ruleId") for rule in blocking_failures
+            ],
+            "reviewRuleIds": [
+                rule.get("ruleId") for rule in review_failures
+            ],
             "qualityScore": quality_score,
             "ipBlocked": ip.get("blocked", False),
             "ipNeedsReview": ip.get("needsReview", False),
@@ -111,55 +146,59 @@ def run(ctx) -> None:
     if moderation.get("blocked"):
         ctx.score = 0
         ctx.set_verdict("FAIL")
-        ctx.debug["fail_reason"] = "Модерація заблокувала заборонений контент."
+        ctx.debug["fail_reason"] = get_aggregate_reason("moderation_blocked")
         ctx.mark_step_done("aggregate")
         return
 
     if ip.get("blocked"):
-        _set_fail(ctx, "Підтверджений IP-ризик.")
+        _set_fail(ctx, get_aggregate_reason("ip_blocked"))
         ctx.mark_step_done("aggregate")
         return
 
     if blocking_failures:
-        _set_fail(ctx, f"Блокуюче правило: {blocking_failures[0].get('ruleId')}")
+        _set_fail(ctx, get_aggregate_reason("blocking_generic"))
         ctx.mark_step_done("aggregate")
         return
 
     if quality_score <= QUALITY_CRITICAL_SCORE and (not resolution_ok or not blur_ok):
-        _set_need_review(ctx, "Якість зображення занадто низька для надійної автоматичної перевірки.")
+        _set_need_review(ctx, get_aggregate_reason("quality_review"))
         ctx.mark_step_done("aggregate")
         return
 
     if not resolution_ok:
-        _set_need_review(ctx, "Роздільна здатність нижча за мінімум для надійної перевірки.")
+        _set_need_review(ctx, get_aggregate_reason("resolution_review"))
         ctx.mark_step_done("aggregate")
         return
 
     if not is_apparel:
-        if apparel_source == "ml" and apparel_confidence >= NON_APPAREL_BLOCK_CONFIDENCE:
-            _set_fail(ctx, "ML apparel classifier з високою впевненістю визначив non-apparel.")
+        if (
+            apparel_source == "ml"
+            and apparel_confidence >= NON_APPAREL_BLOCK_CONFIDENCE
+        ):
+            _set_fail(ctx, get_aggregate_reason("non_apparel_block"))
         else:
-            _set_need_review(ctx, "Тип зображення невпевнений або може бути non-apparel.")
+            _set_need_review(ctx, get_aggregate_reason("non_apparel_review"))
+
         ctx.mark_step_done("aggregate")
         return
 
     if uncertain_apparel or unknown_scene_from_weak_ml:
-        _set_need_review(ctx, "Потрібна ручна перевірка через низьку впевненість визначення типу зображення.")
+        _set_need_review(ctx, get_aggregate_reason("uncertain_apparel"))
         ctx.mark_step_done("aggregate")
         return
 
     if ip.get("needsReview"):
-        _set_need_review(ctx, "Потенційна IP-схожість потребує ручної перевірки.")
+        _set_need_review(ctx, get_aggregate_reason("ip_review"))
         ctx.mark_step_done("aggregate")
         return
 
     if moderation.get("needsReview"):
-        _set_need_review(ctx, "Moderation-сигнали потребують ручної перевірки.")
+        _set_need_review(ctx, get_aggregate_reason("moderation_review"))
         ctx.mark_step_done("aggregate")
         return
 
     if review_failures:
-        _set_need_review(ctx, f"Рекомендована ручна перевірка для {review_failures[0].get('ruleId')}.")
+        _set_need_review(ctx, get_aggregate_reason("manual_review_generic"))
         ctx.mark_step_done("aggregate")
         return
 
