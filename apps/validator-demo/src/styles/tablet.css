@@ -1,0 +1,221 @@
+/* =========================
+   TABLET: 761px - 1180px
+========================= */
+
+@media (min-width: 761px) and (max-width: 1180px) {
+  .header {
+    height: 76px;
+    padding: 0 28px;
+  }
+
+  .brand {
+    font-size: 24px;
+    letter-spacing: 2.7px;
+  }
+
+  .brand::after {
+    height: 7px;
+  }
+
+  .nav {
+    gap: 28px;
+    font-size: 12px;
+  }
+
+  .headerActions {
+    gap: 16px;
+  }
+
+  .uploadBtn {
+    min-height: 44px;
+    padding: 0 20px;
+    font-size: 12px;
+  }
+
+  .page {
+    max-width: none;
+    padding: 34px 28px 44px;
+  }
+
+  .hero {
+    padding-bottom: 28px;
+    margin-bottom: 28px;
+  }
+
+  .hero h1 {
+    font-size: 36px;
+    line-height: 1.08;
+    letter-spacing: -1px;
+  }
+
+  .hero p {
+    font-size: 14px;
+  }
+
+  .analysisGrid {
+    display: grid;
+    grid-template-columns: minmax(230px, 280px) minmax(0, 1fr);
+    gap: 20px;
+    align-items: stretch;
+  }
+
+  .imageCard {
+    padding: 14px;
+  }
+
+  .imageCard img {
+    height: 340px;
+  }
+
+  .scoreCard {
+    min-width: 0;
+    padding: 24px;
+  }
+
+  .scoreTop > div:first-child,
+  .verdictBox {
+    align-items: center;
+    text-align: center;
+  }
+
+  .scoreLabel,
+  .scoreValue,
+  .verdictValue,
+  .verdictBox p {
+    width: 100%;
+    text-align: center;
+  }
+
+  .scoreValue {
+    font-size: 42px;
+    justify-content: center;
+  }
+
+  .divider {
+    display: block;
+    height: 100%;
+    min-height: 116px;
+  }
+
+  .scoreValue span {
+    font-size: 20px;
+  }
+
+  .verdictValue {
+    font-size: 26px;
+    white-space: normal;
+  }
+
+  .verdictBox p {
+    font-size: 13px;
+    line-height: 1.35;
+  }
+
+  .fileMetrics {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    padding: 22px 0;
+  }
+
+  .fileMetrics div {
+    padding: 0 14px;
+    text-align: center;
+  }
+
+  .fileMetrics div:first-child {
+    padding-left: 0;
+  }
+
+  .fileMetrics div:last-child {
+    padding-right: 0;
+  }
+
+  .fileMetrics strong {
+    font-size: 15px;
+  }
+
+  .metricRow {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(120px, 1fr));
+    column-gap: 28px;
+    row-gap: 16px;
+    padding: 24px 0 0;
+  }
+
+  .metricItem {
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 8px;
+    min-width: 0;
+  }
+
+  .metricIcon {
+    width: 34px;
+    height: 34px;
+    border-radius: 10px;
+    font-size: 14px;
+    flex-shrink: 0;
+  }
+
+  .metricText {
+    min-width: 0;
+    height: 34px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: flex-start;
+  }
+
+  .metricText strong {
+    font-size: 12px;
+    font-weight: var(--weight-heavy);
+    line-height: 1;
+    white-space: nowrap;
+  }
+
+  .metricText span {
+    margin-top: 4px;
+    font-size: 11px;
+    line-height: 1;
+  }
+
+  .issuesCard {
+    grid-column: 1 / -1;
+    padding: 24px 26px;
+  }
+
+  .issueItem {
+    grid-template-columns: 34px minmax(0, 1fr) auto;
+  }
+
+  .issueItem strong {
+    max-width: none;
+  }
+
+  .issueItem p {
+    max-width: 760px;
+  }
+
+  .improve {
+    padding: 22px 28px;
+  }
+
+  .footer {
+    padding: 38px 28px 30px;
+  }
+
+  .footerGrid {
+    max-width: none;
+    grid-template-columns: 1.2fr 1fr 1fr;
+    gap: 34px;
+  }
+
+  .footer p {
+    font-size: 12px;
+  }
+
+  .footer h4 {
+    font-size: 13px;
+  }
+}

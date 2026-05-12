@@ -1,0 +1,367 @@
+/* =========================
+   MOBILE: <= 760px
+========================= */
+
+@media (max-width: 760px) {
+  .app {
+    width: 100%;
+    margin: 0;
+    border-radius: 0;
+    overflow: hidden;
+  }
+
+  .header {
+    height: 64px;
+    padding: 0 14px;
+  }
+
+  .brand {
+    color: var(--color-black);
+    font-size: 18px;
+    font-weight: var(--weight-black);
+    letter-spacing: 2.2px;
+    white-space: nowrap;
+  }
+
+  .brand::after {
+    left: 6px;
+    right: -2px;
+    bottom: 0;
+    height: 5px;
+  }
+
+  .nav {
+    display: none;
+  }
+
+  .headerActions {
+    gap: 24px;
+  }
+
+  .uploadBtn {
+    min-height: 30px;
+    padding: 0 9px;
+    font-size: 0;
+    border-radius: 6px;
+    box-shadow: none;
+  }
+
+  .uploadBtn::before {
+    content: "upload";
+    font-size: 10px;
+    font-weight: var(--weight-heavy);
+    line-height: 1;
+    text-transform: uppercase;
+  }
+
+  .menuBtn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--color-black);
+    font-size: 24px;
+    line-height: 1;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    box-shadow: none;
+    cursor: pointer;
+  }
+
+  .page {
+    max-width: none;
+    padding: 22px 12px 30px;
+  }
+
+  .hero {
+    padding-bottom: 22px;
+    margin-bottom: 22px;
+    text-align: left;
+  }
+
+  .label {
+    font-size: 11px;
+    margin-bottom: 12px;
+    font-weight: var(--weight-heavy);
+  }
+
+  .hero h1 {
+    max-width: none;
+    margin: 0 0 12px;
+    font-size: 24px;
+    font-weight: var(--weight-heavy);
+    line-height: 1.13;
+    letter-spacing: -0.7px;
+  }
+
+  .hero p {
+    max-width: none;
+    margin: 0;
+    font-size: 14px;
+    line-height: 1.5;
+  }
+
+  .analysisGrid {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+
+  .imageCard,
+  .scoreCard,
+  .issuesCard,
+  .improve {
+    border-radius: 11px;
+  }
+
+  .imageCard {
+    padding: 12px;
+  }
+
+  .imageCard img {
+    height: 230px;
+    border-radius: 9px;
+  }
+
+  .viewBtn {
+    height: 40px;
+    margin-top: 12px;
+    font-size: 12px;
+    font-weight: var(--weight-heavy);
+  }
+
+  .scoreCard {
+    width: 100%;
+    min-width: 0;
+    padding: 16px;
+  }
+
+  .scoreTop {
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+    padding: 0 0 20px;
+    border-bottom: 1px solid var(--color-divider);
+  }
+
+  .scoreTop > div:first-child,
+  .verdictBox {
+    width: 100%;
+    min-height: auto;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    justify-content: flex-start;
+    text-align: left;
+  }
+
+  .divider {
+    display: none;
+  }
+
+  .scoreLabel {
+    width: 100%;
+    height: auto;
+    margin: 0 0 7px;
+    font-size: 12px;
+    line-height: 1.2;
+    text-align: left;
+  }
+
+  .scoreValue {
+    display: flex;
+    align-items: baseline;
+    color: var(--color-accent);
+    font-size: 34px;
+    font-weight: var(--weight-heavy);
+    line-height: 1;
+    white-space: nowrap;
+    letter-spacing: -0.5px;
+  }
+
+  .scoreValue span {
+    color: #6b6b73;
+    font-size: 18px;
+    font-weight: var(--weight-regular);
+  }
+
+  .progress {
+    width: 170px;
+    height: 8px;
+    margin-top: 12px;
+  }
+
+  .verdictBox {
+    padding-top: 0;
+  }
+
+  .verdictValue {
+    color: var(--color-warning);
+    font-size: 25px;
+    font-weight: var(--weight-heavy);
+    line-height: 1.08;
+    white-space: normal;
+    letter-spacing: -0.2px;
+  }
+
+  .verdictBox p {
+    max-width: none;
+    margin: 7px 0 0;
+    font-size: 12px;
+    line-height: 1.35;
+    text-align: left;
+  }
+
+  .fileMetrics {
+    display: none;
+  }
+
+  .metricRow {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    justify-content: stretch;
+    gap: 14px 12px;
+    padding: 20px 0 0;
+  }
+
+  .metricItem {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    min-width: 0;
+  }
+
+  .metricIcon {
+    width: 36px;
+    height: 36px;
+    border-radius: 10px;
+    font-size: 14px;
+    flex-shrink: 0;
+  }
+
+  .metricText {
+    height: 36px;
+    min-width: 0;
+  }
+
+  .metricText strong {
+    font-size: 12px;
+    font-weight: var(--weight-heavy);
+    white-space: nowrap;
+  }
+
+  .metricText span {
+    font-size: 11px;
+  }
+
+  .issuesCard {
+    padding: 18px;
+  }
+
+  .issuesTitle {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    margin: 0 0 15px;
+    font-size: 18px;
+    font-weight: var(--weight-heavy);
+    line-height: 1.2;
+  }
+
+  .countBubble {
+    width: 26px;
+    height: 26px;
+    font-size: 12px;
+    font-weight: var(--weight-heavy);
+    flex-shrink: 0;
+  }
+
+  .issueItem {
+    display: grid;
+    grid-template-columns: 34px minmax(0, 1fr);
+    gap: 10px;
+    align-items: start;
+    padding: 15px 0;
+    text-align: left;
+  }
+
+  .issueIcon {
+    width: 34px;
+    height: 34px;
+    margin-top: 0;
+    font-size: 15px;
+    flex-shrink: 0;
+  }
+
+  .issueItem strong {
+    max-width: none;
+    margin: 0 0 6px;
+    font-size: 14px;
+    font-weight: var(--weight-heavy);
+    line-height: 1.25;
+    text-align: left;
+  }
+
+  .issueItem p {
+    margin: 0;
+    font-size: 12px;
+    line-height: 1.45;
+    text-align: left;
+  }
+
+  .badge {
+    grid-column: 2;
+    justify-self: start;
+    align-self: start;
+    width: fit-content;
+    margin-top: 8px;
+    margin-left: 0;
+    padding: 6px 8px;
+    font-size: 9px;
+    font-weight: var(--weight-heavy);
+  }
+
+  .viewIssues {
+    height: 42px;
+    font-size: 12px;
+    font-weight: var(--weight-heavy);
+  }
+
+  .improve {
+    display: block;
+    padding: 18px;
+  }
+
+  .improveIcon {
+    width: 52px;
+    height: 52px;
+    margin-bottom: 14px;
+    font-size: 25px;
+  }
+
+  .improve h3 {
+    font-size: 18px;
+    font-weight: var(--weight-heavy);
+  }
+
+  .improve p {
+    font-size: 13px;
+  }
+
+  .improve button {
+    width: 100%;
+    height: 46px;
+    margin-top: 16px;
+    font-size: 12px;
+    font-weight: var(--weight-heavy);
+  }
+
+  .footer {
+    display: none;
+  }
+
+  .modal img {
+    max-width: 94%;
+    max-height: 80%;
+  }
+}

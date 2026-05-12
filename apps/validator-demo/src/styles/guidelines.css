@@ -1,0 +1,365 @@
+.guidelinesPage {
+  width: 100%;
+}
+
+.guidelinesInner {
+  width: 100%;
+  margin: 0;
+}
+
+/* =========================
+   TOP BUTTON
+========================= */
+
+.guidelinesTopbar {
+  display: flex;
+  justify-content: flex-start;
+  margin-bottom: 30px;
+}
+
+.guidelinesBack {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  padding: 0 16px;
+  border: 1px solid var(--color-accent-border);
+  border-radius: var(--radius-pill);
+  background: #fff5fa;
+  color: var(--color-accent);
+  font-size: 0.8125rem;
+  font-weight: var(--weight-heavy);
+  cursor: pointer;
+  transition: 0.15s ease;
+}
+
+.guidelinesBack:hover {
+  background: var(--color-accent-soft);
+  transform: translateY(-1px);
+}
+
+.guidelinesBack span {
+  font-size: 0.9375rem;
+  line-height: 1;
+}
+
+/* =========================
+   HERO
+========================= */
+
+.guidelinesHero {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin: 0 0 34px;
+  padding-bottom: 30px;
+  text-align: center;
+  border-bottom: 2px solid var(--color-accent-line);
+}
+
+.guidelinesEyebrow {
+  display: inline-block;
+  margin-bottom: 14px;
+  color: var(--color-accent);
+  font-size: var(--font-label);
+  font-weight: var(--weight-heavy);
+  text-transform: uppercase;
+  letter-spacing: 0.7px;
+}
+
+.guidelinesHero h1 {
+  max-width: 920px;
+  margin: 0 auto 14px;
+  color: var(--color-text);
+  font-size: var(--font-h1);
+  font-weight: var(--weight-display);
+  line-height: 1.08;
+  letter-spacing: -1.25px;
+}
+
+.guidelinesHero p {
+  max-width: 720px;
+  margin: 0 auto;
+  color: var(--color-muted);
+  font-size: 0.9375rem;
+  line-height: 1.55;
+}
+
+/* =========================
+   RULE CARDS
+========================= */
+
+.guidelinesGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--gap-page);
+  align-items: stretch;
+}
+
+.guidelineCard,
+.verdictGuide,
+.checklistBox {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card);
+}
+
+.guidelineCard {
+  min-height: 210px;
+  padding: 28px 26px;
+  text-align: center;
+}
+
+.guidelineNumber {
+  display: inline-grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  margin-bottom: 16px;
+  border-radius: 10px;
+  background: var(--color-accent-soft);
+  color: var(--color-accent);
+  font-size: 0.8125rem;
+  font-weight: var(--weight-heavy);
+}
+
+.guidelineCard h3 {
+  margin: 0 0 10px;
+  color: var(--color-text);
+  font-size: 1.125rem;
+  font-weight: var(--weight-heavy);
+  line-height: 1.2;
+  letter-spacing: -0.25px;
+}
+
+.guidelineCard p {
+  max-width: 330px;
+  margin: 0 auto;
+  color: var(--color-muted);
+  font-size: 0.8125rem;
+  line-height: 1.55;
+}
+
+/* =========================
+   VERDICTS
+========================= */
+
+.verdictGuide {
+  margin-top: 30px;
+  padding: 28px 30px;
+}
+
+.verdictGuide h2,
+.checklistBox h2 {
+  margin: 0 0 22px;
+  color: var(--color-text);
+  font-size: 1.375rem;
+  font-weight: var(--weight-heavy);
+  text-align: center;
+  letter-spacing: -0.4px;
+}
+
+.verdictGuideGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.verdictInfo {
+  min-height: 138px;
+  padding: 22px;
+  border-radius: var(--radius-card);
+  border: 1px solid transparent;
+}
+
+.verdictInfo strong {
+  display: block;
+  margin-bottom: 10px;
+  font-size: 1rem;
+  font-weight: var(--weight-heavy);
+}
+
+.verdictInfo p {
+  margin: 0;
+  color: var(--color-muted-strong);
+  font-size: 0.8125rem;
+  line-height: 1.5;
+}
+
+.verdictInfo.pass {
+  background: #eaf8f1;
+  border-color: #c9efdc;
+}
+
+.verdictInfo.pass strong {
+  color: var(--color-success);
+}
+
+.verdictInfo.review {
+  background: #fff4e5;
+  border-color: #ffdca8;
+}
+
+.verdictInfo.review strong {
+  color: var(--color-warning);
+}
+
+.verdictInfo.fail {
+  background: #ffecec;
+  border-color: #ffc9c9;
+}
+
+.verdictInfo.fail strong {
+  color: var(--color-danger);
+}
+
+/* =========================
+   CHECKLIST
+========================= */
+
+.checklistBox {
+  margin-top: 30px;
+  padding: 28px 30px;
+}
+
+.checklistBox ul {
+  width: fit-content;
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 0;
+  list-style: none;
+  color: var(--color-muted-strong);
+  font-size: 0.875rem;
+  line-height: 1.6;
+}
+
+.checklistBox li {
+  position: relative;
+  padding-left: 28px;
+  margin-bottom: 12px;
+  text-align: left;
+}
+
+.checklistBox li:last-child {
+  margin-bottom: 0;
+}
+
+.checklistBox li::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0.65em;
+  width: 8px;
+  height: 8px;
+  border-radius: var(--radius-pill);
+  background: var(--color-accent);
+}
+
+/* =========================
+   RESPONSIVE
+========================= */
+
+@media (max-width: 1180px) {
+  .guidelinesGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .verdictGuideGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .verdictInfo {
+    min-height: auto;
+  }
+}
+
+@media (max-width: 760px) {
+  .guidelinesTopbar {
+    margin-bottom: 22px;
+  }
+
+  .guidelinesBack {
+    min-height: 38px;
+    padding: 0 14px;
+    font-size: 0.75rem;
+  }
+
+  .guidelinesHero {
+    align-items: flex-start;
+    margin-bottom: 22px;
+    padding-bottom: 24px;
+    text-align: left;
+  }
+
+  .guidelinesEyebrow {
+    margin-bottom: 14px;
+    font-size: 11px;
+  }
+
+  .guidelinesHero h1 {
+    max-width: none;
+    margin: 0 0 14px;
+    font-size: 26px;
+    font-weight: var(--weight-heavy);
+    line-height: 1.12;
+    letter-spacing: -0.8px;
+  }
+
+  .guidelinesHero p {
+    max-width: none;
+    margin: 0;
+    font-size: 14px;
+    line-height: 1.5;
+  }
+
+  .guidelinesGrid,
+  .verdictGuideGrid {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+
+  .guidelineCard,
+  .verdictGuide,
+  .checklistBox {
+    padding: 22px;
+  }
+
+  .guidelineCard {
+    min-height: auto;
+    text-align: left;
+  }
+
+  .guidelineNumber {
+    width: 40px;
+    height: 40px;
+    margin-bottom: 16px;
+  }
+
+  .guidelineCard h3 {
+    font-size: 18px;
+  }
+
+  .guidelineCard p {
+    max-width: none;
+    margin: 0;
+    font-size: 13px;
+  }
+
+  .verdictGuide h2,
+  .checklistBox h2 {
+    font-size: 20px;
+    text-align: left;
+  }
+
+  .verdictInfo {
+    padding: 20px;
+  }
+
+  .checklistBox ul {
+    width: 100%;
+    margin: 0;
+    font-size: 14px;
+  }
+}

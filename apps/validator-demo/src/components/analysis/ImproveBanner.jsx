@@ -1,4 +1,4 @@
-export function ImproveBanner() {
+export function ImproveBanner({ onOpenGuidelines }) {
   return (
     <section className="improve">
       <div className="improveIcon">♡</div>
@@ -8,7 +8,7 @@ export function ImproveBanner() {
         <p>Check our design guidelines to create the perfect print.</p>
       </div>
 
-      <button>View Guidelines</button>
+      <button onClick={onOpenGuidelines}>View guidelines</button>
     </section>
   );
 }
