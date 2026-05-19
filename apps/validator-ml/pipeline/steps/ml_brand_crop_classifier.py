@@ -36,6 +36,9 @@ def _get_logo_detections(ctx):
                 "original_bbox": item.get("original_bbox"),
                 "confidence": item.get("emblem_score", item.get("confidence", 0.5)),
                 "emblem_score": item.get("emblem_score", item.get("confidence", 0.5)),
+                "area_ratio": item.get("area_ratio"),
+                "aspect_ratio": item.get("aspect_ratio"),
+                "center_dist": item.get("center_dist"),
                 "source": item.get("source", "logo_candidate_crop"),
                 "crop": crop,
             }
@@ -138,5 +141,7 @@ def run(ctx):
                 "error": str(error),
             },
         )
+
+    ctx.mark_step_done("ml_brand_crop_classifier")
 
     return ctx

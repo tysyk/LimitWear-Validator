@@ -1,88 +1,38 @@
+from __future__ import annotations
+
 from pathlib import Path
 
-import cv2
+import pytest
 
-from pipeline.context import PipelineContext
-from pipeline.runner import run_pipeline
-
-
-BASE_DIR = Path("data/evaluation")
-
-EXPECTED = {
-    "pass": "PASS",
-    "need_review": "NEED_REVIEW",
-    "fail": "FAIL",
-}
+from tests.helpers import (
+    dataset_counts,
+    iter_dataset_cases,
+    run_pipeline_on_image,
+    assert_pipeline_completed,
+    assert_verdict,
+)
 
 
-def load_image(path):
-    image = cv2.imread(str(path))
-
-    if image is None:
-        raise ValueError(f"Cannot read image: {path}")
-
-    return image
+def _cases() -> list:
+    evaluation_root = Path(__file__).resolve().parents[1] / "data" / "evaluation"
+    return iter_dataset_cases(evaluation_root)
 
 
-def test_evaluation_dataset():
-    total = 0
-    correct = 0
+@pytest.mark.evaluation
+def test_evaluation_dataset_has_all_expected_buckets(evaluation_root: Path) -> None:
+    counts = dataset_counts(evaluation_root)
 
-    for folder_name, expected_verdict in EXPECTED.items():
-        folder = BASE_DIR / folder_name
+    assert counts["pass"] > 0
+    assert counts["need_review"] > 0
+    assert counts["fail"] > 0
 
-        images = list(folder.glob("*"))
 
-        print(f"\n--- {folder_name.upper()} ---")
+@pytest.mark.evaluation
+@pytest.mark.slow
+@pytest.mark.parametrize("case", _cases(), ids=lambda item: item.case_id)
+def test_evaluation_dataset_verdicts(case) -> None:
+    ctx = run_pipeline_on_image(case.path, profile_id="evaluation")
 
-        for image_path in images:
-            image = load_image(image_path)
-
-            height, width = image.shape[:2]
-
-            ctx = PipelineContext(
-                image_id=image_path.stem,
-                profile_id="evaluation",
-                bgr=image,
-                width=width,
-                height=height,
-            )
-
-            result = run_pipeline(ctx)
-
-            actual = result.verdict
-
-            is_correct = actual == expected_verdict
-
-            if is_correct:
-                correct += 1
-
-            total += 1
-
-            status = "OK" if is_correct else "FAIL"
-
-            print(
-                f"[{status}] "
-                f"{image_path.name} | "
-                f"expected={expected_verdict} "
-                f"actual={actual} "
-                f"score={result.score}"
-            ) 
-
-            # print("  violations:", result.violations)
-            # print("  rules:", result.rule_results)
-            # print("  quality:", result.quality)
-            # print("  scene:", result.scene)
-            # print("  ml:", result.ml)
-            # print("  detections:", result.detections)
-            # print("  explain:", result.explain)
-
-    accuracy = (correct / total) * 100 if total else 0
-
-    print("\n====================")
-    print(f"Total: {total}")
-    print(f"Correct: {correct}")
-    print(f"Accuracy: {accuracy:.2f}%")
-    print("====================")
-
-    assert total > 0
+    assert_pipeline_completed(ctx)
+    assert not ctx.errors
+    assert_verdict(ctx, case.expected_verdict, case_id=case.case_id)

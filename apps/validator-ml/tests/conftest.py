@@ -3,60 +3,67 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
+import pytest
+
 
 APP_ROOT = Path(__file__).resolve().parents[1]
+TEST_ROOT = APP_ROOT / "tests"
+REPO_ROOT = APP_ROOT.parents[1]
+
 if str(APP_ROOT) not in sys.path:
     sys.path.insert(0, str(APP_ROOT))
 
-
-def build_ctx(*, width: int = 1200, height: int = 1200):
-    from pipeline.context import PipelineContext
-
-    return PipelineContext(
-        image_id="test-analysis",
-        profile_id="default",
-        bgr=None,
-        width=width,
-        height=height,
-    )
+if str(TEST_ROOT) not in sys.path:
+    sys.path.insert(0, str(TEST_ROOT))
 
 
-def base_quality():
+@pytest.fixture(scope="session")
+def app_root() -> Path:
+    return APP_ROOT
+
+
+@pytest.fixture(scope="session")
+def evaluation_root(app_root: Path) -> Path:
+    return app_root / "data" / "evaluation"
+
+
+@pytest.fixture(scope="session")
+def pass_image(evaluation_root: Path) -> Path:
+    return evaluation_root / "pass" / "1.jpg"
+
+
+@pytest.fixture(scope="session")
+def need_review_image(evaluation_root: Path) -> Path:
+    return evaluation_root / "need_review" / "10.png"
+
+
+@pytest.fixture(scope="session")
+def fail_image(evaluation_root: Path) -> Path:
+    return evaluation_root / "fail" / "5.jpg"
+
+
+@pytest.fixture(scope="session")
+def response_contract_keys() -> set[str]:
     return {
-        "passed_resolution": True,
-        "passed_blur": True,
-        "quality_score": 1.0,
-        "blur_score": 100.0,
-    }
-
-
-def base_scene(*, is_apparel: bool = True, scene_type: str = "apparel_candidate", confidence: float = 0.9):
-    return {
-        "is_apparel": is_apparel,
-        "type": scene_type,
-        "apparel_source": "ml",
-        "apparel_confidence": confidence,
-    }
-
-
-def base_ml(*, label: str = "apparel", confidence: float = 0.9):
-    return {
-        "apparel": {
-            "label": label,
-            "confidence": confidence,
-            "isReliable": True,
-            "source": "ml",
-        }
-    }
-
-
-def empty_detections():
-    return {
-        "ocr": [],
-        "lines": [],
-        "ip": {"exactHits": [], "suspiciousHits": [], "blocked": False, "needsReview": False},
-        "logoLikeMarks": [],
-        "visualLogoMarks": [],
-        "qrMarks": [],
-        "watermarkMarks": [],
+        "analysisId",
+        "profileId",
+        "summary",
+        "input",
+        "quality",
+        "scene",
+        "roi",
+        "moderation",
+        "detections",
+        "ml",
+        "ruleResults",
+        "score",
+        "verdict",
+        "violations",
+        "explain",
+        "artifacts",
+        "debug",
+        "warnings",
+        "errors",
+        "stepsCompleted",
+        "timings",
     }

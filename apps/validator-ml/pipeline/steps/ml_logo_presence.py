@@ -11,7 +11,7 @@ def run(ctx) -> None:
         ctx.scene = {}
 
     try:
-        from ml.logo_presence.inference import predict_logo_presence
+        from ml.logo_presence.inference_logo_presence import predict_logo_presence
 
         result = predict_logo_presence(ctx.bgr)
 

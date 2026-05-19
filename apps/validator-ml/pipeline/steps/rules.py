@@ -4,6 +4,8 @@ from typing import Any, Dict, List
 
 from core.config import (
     NON_APPAREL_BLOCK_CONFIDENCE,
+    VISUAL_LOGO_FRAGMENT_REVIEW_COUNT,
+    VISUAL_LOGO_NO_BRAND_CONFIDENCE,
     WATERMARK_BLOCK_SCORE,
     WATERMARK_CENTEREDNESS,
     WATERMARK_STRONG_AREA_RATIO,
@@ -182,6 +184,8 @@ def run(ctx) -> None:
 
     brand_signal = _get_brand_signal(ctx)
     ocr_brand_hits = _get_ocr_brand_hits(moderation)
+    logo_presence = ml.get("logo_presence", {}) or {}
+    brand_model = ml.get("brand_crop_classifier", {}) or {}
 
     if ocr_brand_hits and not brand_signal.get("detected"):
         brand_signal = {
@@ -332,6 +336,46 @@ def run(ctx) -> None:
             "needsReview": False,
         },
     )
+
+    brand_label = str(
+        brand_model.get("brand_label")
+        or brand_model.get("raw_label")
+        or brand_model.get("label")
+        or ""
+    ).lower()
+
+    visual_logo_review = (
+        not brand_signal.get("detected")
+        and bool(logo_presence.get("isLogo"))
+        and bool(logo_presence.get("isReliable"))
+        and brand_label == "no_brand"
+        and float(brand_model.get("confidence", 0.0) or 0.0)
+        >= VISUAL_LOGO_NO_BRAND_CONFIDENCE
+        and len(visual_logo_marks) >= VISUAL_LOGO_FRAGMENT_REVIEW_COUNT
+        and len(ocr_items) == 0
+    )
+
+    if visual_logo_review:
+        ctx.add_rule_result(
+            rule_id="VISUAL_LOGO_REVIEW",
+            passed=False,
+            severity="medium",
+            penalty=8,
+            title="Емблемоподібний елемент",
+            message=(
+                "Виявлено емблемоподібний елемент, рекомендована ручна перевірка."
+            ),
+            bbox=brand_model.get("crop_bbox"),
+            meta={
+                "blocking": False,
+                "needsReview": True,
+                "riskType": "visual_logo_review",
+                "visualLogoCount": len(visual_logo_marks),
+                "logoPresenceConfidence": logo_presence.get("confidence"),
+                "brandClassifierLabel": brand_label,
+                "brandClassifierConfidence": brand_model.get("confidence"),
+            },
+        )
 
     ctx.add_rule_result(
         rule_id="TEXT_AMOUNT_ALLOWED",

@@ -9,6 +9,9 @@ from torchvision import transforms
 from core.brand_keywords import KNOWN_BRAND_CLASSES, NON_BRAND_CLASSES
 from core.config import (
     BRAND_CONFIDENCE_THRESHOLD,
+    BRAND_SUSPECTED_FALLBACK_THRESHOLD,
+    BRAND_SUSPECTED_MAX_AREA_RATIO,
+    BRAND_SUSPECTED_MIN_MARGIN,
     BRAND_SUSPECTED_THRESHOLD,
 )
 from ml.common.models.mobilenet_v3_classifier import (
@@ -98,6 +101,46 @@ def _find_suspected_known_brand(top_predictions):
     return None
 
 
+def _top_prediction_margin(top_predictions, positive_label: str) -> float:
+    positive_confidence = 0.0
+    strongest_alternative = 0.0
+
+    for item in top_predictions or []:
+        label = str(item.get("label", "")).lower()
+        confidence = float(item.get("confidence", 0.0) or 0.0)
+
+        if label == positive_label:
+            positive_confidence = max(positive_confidence, confidence)
+        else:
+            strongest_alternative = max(strongest_alternative, confidence)
+
+    return round(positive_confidence - strongest_alternative, 4)
+
+
+def _is_supported_suspected_brand(item) -> bool:
+    if not item.get("suspectedKnownBrand"):
+        return False
+
+    label = str(item.get("suspectedBrandLabel") or "").lower()
+    confidence = float(item.get("suspectedBrandConfidence", 0.0) or 0.0)
+    source = str(item.get("crop_source") or "")
+    area_ratio = float(item.get("area_ratio", 0.0) or 0.0)
+    margin = _top_prediction_margin(item.get("top_predictions", []), label)
+
+    item["suspectedBrandMargin"] = margin
+
+    if margin < BRAND_SUSPECTED_MIN_MARGIN:
+        return False
+
+    if source.startswith("chest_"):
+        return confidence >= BRAND_SUSPECTED_FALLBACK_THRESHOLD
+
+    if area_ratio and area_ratio > BRAND_SUSPECTED_MAX_AREA_RATIO:
+        return False
+
+    return confidence >= BRAND_SUSPECTED_THRESHOLD
+
+
 def predict_single_crop(crop):
     model, idx_to_label = _load_model()
 
@@ -169,6 +212,9 @@ def predict_brand_crop_classifier(logo_candidates):
             "original_bbox": candidate.get("original_bbox"),
             "crop_source": candidate.get("source"),
             "detector_confidence": candidate.get("emblem_score"),
+            "area_ratio": candidate.get("area_ratio"),
+            "aspect_ratio": candidate.get("aspect_ratio"),
+            "center_dist": candidate.get("center_dist"),
         })
 
         results.append(prediction)
@@ -178,9 +224,12 @@ def predict_brand_crop_classifier(logo_candidates):
         if item.get("isKnownBrand")
     ]
 
+    for item in results:
+        item["supportedSuspectedKnownBrand"] = _is_supported_suspected_brand(item)
+
     suspected_brand_results = [
         item for item in results
-        if item.get("suspectedKnownBrand")
+        if item.get("supportedSuspectedKnownBrand")
     ]
 
     if known_brand_results:
@@ -219,6 +268,8 @@ def predict_brand_crop_classifier(logo_candidates):
             "crop_results": [],
         }
 
+    supported_suspected = bool(best.get("supportedSuspectedKnownBrand", False))
+
     return {
         "label": best["label"],
         "brand_label": best["brand_label"],
@@ -227,9 +278,19 @@ def predict_brand_crop_classifier(logo_candidates):
         "isReliable": best["isReliable"],
         "isKnownBrand": best["isKnownBrand"],
         "threshold": BRAND_CONFIDENCE_THRESHOLD,
-        "suspectedKnownBrand": best.get("suspectedKnownBrand", False),
-        "suspectedBrandLabel": best.get("suspectedBrandLabel"),
-        "suspectedBrandConfidence": best.get("suspectedBrandConfidence", 0.0),
+        "suspectedKnownBrand": supported_suspected,
+        "suspectedBrandLabel": (
+            best.get("suspectedBrandLabel") if supported_suspected else None
+        ),
+        "suspectedBrandConfidence": (
+            best.get("suspectedBrandConfidence", 0.0)
+            if supported_suspected
+            else 0.0
+        ),
+        "unsupportedSuspectedKnownBrand": (
+            bool(best.get("suspectedKnownBrand")) and not supported_suspected
+        ),
+        "suspectedBrandMargin": best.get("suspectedBrandMargin"),
         "suspectedBrandThreshold": best.get(
             "suspectedBrandThreshold",
             BRAND_SUSPECTED_THRESHOLD,
