@@ -1,0 +1,58 @@
+# =========================
+# PYTHON / CACHE
+# =========================
+.venv/
+venv/
+env/
+__pycache__/
+.pytest_cache/
+*.pyc
+*.pyo
+*.pyd
+*.log
+
+# =========================
+# IDE / OS / GIT
+# =========================
+.git/
+.gitignore
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# =========================
+# DATA / IMAGES / ARTIFACTS
+# =========================
+data/
+datasets/
+artifacts/
+
+# усі локальні картинки не копіювати в Docker
+*.jpg
+*.jpeg
+*.png
+*.webp
+*.bmp
+*.gif
+*.tiff
+*.svg
+
+# =========================
+# TEST / LOCAL FILES
+# =========================
+structure.txt
+*.tmp
+*.bak
+*.zip
+*.rar
+
+# =========================
+# TRAINING OUTPUTS
+# =========================
+runs/
+wandb/
+mlruns/
+checkpoints/
+outputs/
+logs/

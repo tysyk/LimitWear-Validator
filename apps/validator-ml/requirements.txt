@@ -1,11 +1,41 @@
-fastapi
-uvicorn
-python-multipart
-numpy
-opencv-python-headless
-easyocr
-torch
-torchvision
-pydantic
-httpx
-pytest
+# =========================
+# API / BACKEND
+# =========================
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+python-multipart==0.0.20
+pydantic==2.10.4
+
+# =========================
+# IMAGE PROCESSING / CV
+# =========================
+opencv-python-headless==4.10.0.84
+numpy==1.26.4
+Pillow==11.0.0
+
+# =========================
+# OCR
+# =========================
+easyocr==1.7.2
+
+# =========================
+# MACHINE LEARNING
+# =========================
+torch==2.5.1
+torchvision==0.20.1
+transformers==4.47.1
+safetensors==0.4.5
+huggingface-hub==0.27.0
+
+# =========================
+# UTILITIES
+# =========================
+scikit-learn==1.6.0
+tqdm==4.67.1
+PyYAML==6.0.2
+
+# =========================
+# TESTING
+# =========================
+pytest==8.3.4
+httpx==0.28.1

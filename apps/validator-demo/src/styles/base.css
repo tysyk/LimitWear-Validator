@@ -4,11 +4,15 @@
 
 .app {
   width: 100%;
+  min-height: 100svh;
   margin: 0;
   border-radius: 0;
   background: var(--color-surface);
   overflow: hidden;
   box-shadow: var(--shadow-app);
+
+  display: flex;
+  flex-direction: column;
 }
 
 .page {
@@ -17,6 +21,8 @@
   margin: 0 auto;
   padding: var(--page-padding-top) var(--page-padding-x)
     var(--page-padding-bottom);
+
+  flex: 1;
 }
 
 /* =========================

@@ -1,87 +1,55 @@
 # LimitWear Validator
 
-LimitWear Validator is a FastAPI-based prototype for validating clothing design submissions before publication.
+Інтелектуальна система перевірки зображень для онлайн-платформи дизайнерського одягу.
 
-The current pre-final version uses a hybrid pipeline: the ML model classifies `apparel` vs `non_apparel`, while heuristic detectors, moderation, IP checks, and business rules make the final publishing decision.
+Система виконує автоматизований аналіз графічних матеріалів, які можуть завантажуватися користувачами на платформу дизайнерського одягу. Перевірка охоплює якість зображення, наявність тексту, потенційних брендових елементів, небажаного контенту та формування фінального рішення у вигляді статусів `PASS`, `NEED_REVIEW` або `FAIL`.
 
-## Setup
+---
 
-Create and activate a virtual environment:
+## Автор
 
-```powershell
-cd apps/validator-ml
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-```
+- **ПІБ**: Тисовський Олег Ярославович
+- **Група**: ФЕП-42
+- **Спеціальність**: F2 Інженерія програмного забезпечення
+- **Керівник**: Шувар Роман Ярославович, кандидат фізико-математичних наук, доцент
+- **Рік виконання**: 2026
 
-Install dependencies:
+---
 
-```powershell
-pip install -r requirements.txt
-```
+## Загальна інформація
 
-## Run API
+- **Тип проєкту**: backend-сервіс + вебінтерфейс для демонстрації
+- **Мова програмування backend**: Python
+- **Frontend**: React
+- **API**: FastAPI
+- **ML/CV стек**: PyTorch, OpenCV, EasyOCR
+- **Тестування**: pytest, evaluation dataset
+- **Контейнеризація**: Docker
 
-```powershell
-cd apps/validator-ml
-uvicorn main:app --reload --host 127.0.0.1 --port 8000
-```
+---
 
-Health check:
+## Основний функціонал
 
-```powershell
-curl http://127.0.0.1:8000/health
-```
+- Завантаження зображення для перевірки.
+- Перевірка технічних характеристик зображення.
+- Оцінювання якості зображення.
+- Визначення типу сцени.
+- OCR-аналіз текстових елементів.
+- Виявлення потенційних логотипів або брендових елементів.
+- Використання ML-модулів для аналізу apparel-контенту.
+- Rule-based перевірка сигналів моделей.
+- Агрегування результатів у фінальний verdict-статус.
+- Формування пояснення результату перевірки.
+- Підтримка статусів `PASS`, `NEED_REVIEW`, `FAIL`.
+- API-доступ через FastAPI.
+- Swagger-документація для тестування endpoint-запитів.
+- Вебінтерфейс для демонстрації результатів перевірки.
 
-Analyze an image:
+---
 
-```powershell
-curl -X POST http://127.0.0.1:8000/analyze `
-  -F "profile_id=default" `
-  -F "file=@C:\path\to\image.png"
-```
+## Архітектура системи
 
-## Pipeline
-
-The active pipeline is:
+Система побудована за pipeline-підходом. Вхідне зображення послідовно проходить кілька етапів обробки:
 
 ```text
-quality_gate -> ml_apparel -> roi_extract -> detectors -> scene_type -> moderation -> rules -> aggregate -> explain
-```
-
-Main responsibilities:
-
-- `ml_apparel`: classifies the image as apparel or non-apparel.
-- `scene_type`: stores scene metadata and aligns `scene.type` with reliable ML apparel output.
-- `detectors`: extracts OCR, lines/skew, QR, watermark-like, logo-like, and visual-emblem signals.
-- `moderation`: checks prohibited text signals such as adult, hate, violence, and self-harm content.
-- `rules`: converts detector signals into business-rule results.
-- `aggregate`: produces the final verdict.
-- `explain`: creates human-readable explanation and optional annotated artifacts.
-
-## Verdicts
-
-- `PASS`: no blocking or review-worthy issues were found.
-- `WARN`: non-blocking issues were found; the design can continue but should be checked.
-- `NEED_REVIEW`: the system is uncertain or found heuristic risk that needs manual review.
-- `FAIL`: confirmed blocking risk, such as moderation block, confirmed IP/brand risk, or high-confidence non-apparel input.
-- `ERROR`: a technical error prevented analysis.
-
-## Current ML Scope
-
-The ML model currently answers only one question: whether the submitted image looks like apparel or non-apparel.
-
-The final decision is not made by the ML model alone. It is made by the hybrid pipeline using:
-
-- ML apparel classification;
-- OCR and IP text risk;
-- visual logo-like shape detection;
-- QR and watermark-like checks;
-- moderation signals;
-- business rules and aggregate policy.
-
-Future work after this pre-final state:
-
-- retrain or replace `ml/weights/apparel_resnet18.pth`;
-- build the web interface or frontend integration;
-- expand the curated test image set in `data/test_images/`.
+image → quality gate → scene type → ROI / detectors → OCR / ML → rules → aggregate → explain
