@@ -25,6 +25,7 @@ function App() {
     try {
       setLoading(true);
       setError(null);
+      setResult(null);
       setPage("validator");
 
       setImageUrl(URL.createObjectURL(file));
@@ -66,7 +67,7 @@ function App() {
 
             {error && <div className="error">{error}</div>}
 
-            {result && (
+            {!loading && result && (
               <>
                 <AnalysisHero result={result} />
                 <AnalysisResult result={result} imageUrl={imageUrl} />

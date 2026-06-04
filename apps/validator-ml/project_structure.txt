@@ -1,0 +1,100 @@
+﻿├── api
+│   ├── routes.py
+│   └── schemas.py
+├── core
+│   ├── brand_keywords.py
+│   ├── config.py
+│   ├── enums.py
+│   ├── ip_keywords.py
+│   ├── messages.py
+│   └── moderation_terms.py
+├── data
+│   └── evaluation
+│       ├── fail
+│       ├── need_review
+│       └── pass
+├── detectors
+│   ├── easyocr_detector.py
+│   ├── line_detector.py
+│   ├── logo_candidate_extractor.py
+│   ├── logo_visual_detector.py
+│   ├── qr_detector.py
+│   └── watermark_detector.py
+├── explain
+│   └── annotate.py
+├── ip
+│   ├── __init__.py
+│   └── intellectual_property_service.py
+├── ml
+│   ├── adult_safety
+│   │   ├── inference_adult_safety.py
+│   │   └── test_inference_adult_safety.py
+│   ├── apparel
+│   │   ├── dataset_download_apparel.py
+│   │   ├── dataset_split_apparel.py
+│   │   ├── evaluate_apparel.py
+│   │   ├── inference_apparel.py
+│   │   └── train_apparel.py
+│   ├── apparel_type
+│   │   ├── dataset_download_apparel_type.py
+│   │   ├── dataset_split_apparel_type.py
+│   │   ├── evaluate_apparel_type.py
+│   │   ├── inference_apparel_type.py
+│   │   ├── model_apparel_type.py
+│   │   └── train_apparel_type.py
+│   ├── brand_crop_classifier
+│   │   ├── dataset_build_from_sources.py
+│   │   ├── dataset_download_brand_crop_classifier.py
+│   │   ├── dataset_generate_no_brand_sources.py
+│   │   ├── dataset_generate_unknown_logo_sources.py
+│   │   ├── evaluate_brand_crop_classifier.py
+│   │   ├── inference_brand_crop_classifier.py
+│   │   └── train_brand_crop_classifier.py
+│   ├── common
+│   │   └── models
+│   │       ├── mobilenet_v3_classifier.py
+│   │       └── resnet18_classifier.py
+│   └── logo_presence
+│       ├── dataset_build_logo_presence.py
+│       ├── dataset_download_logo_presence.py
+│       ├── dataset_split_logo_presence.py
+│       ├── evaluate_logo_presence.py
+│       ├── inference_logo_presence.py
+│       ├── model_logo_presence.py
+│       └── train_logo_presence.py
+├── moderation
+│   └── moderation_service.py
+├── pipeline
+│   ├── steps
+│   │   ├── aggregate.py
+│   │   ├── detectors.py
+│   │   ├── explain.py
+│   │   ├── ml_adult_safety.py
+│   │   ├── ml_apparel.py
+│   │   ├── ml_apparel_type.py
+│   │   ├── ml_brand_crop_classifier.py
+│   │   ├── ml_logo_presence.py
+│   │   ├── moderation.py
+│   │   ├── quality_gate.py
+│   │   ├── roi_extract.py
+│   │   ├── rules.py
+│   │   └── scene_type.py
+│   ├── context.py
+│   └── runner.py
+├── tests
+│   ├── conftest.py
+│   ├── helpers.py
+│   ├── test_aggregate_logic.py
+│   ├── test_api_endpoint.py
+│   ├── test_brand_detection_flow.py
+│   ├── test_evaluation_dataset.py
+│   ├── test_full_pipeline.py
+│   ├── test_moderation_logic.py
+│   └── test_ocr_detection.py
+├── .dockerignore
+├── Dockerfile
+├── evaluate_verdicts.py
+├── main.py
+├── project_structure.txt
+├── pytest.ini
+└── requirements.txt
